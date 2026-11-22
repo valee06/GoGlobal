@@ -5,8 +5,9 @@
 
 Для локального запуска необходимы:
 - Docker Desktop
-- Python 3.12 или выше
 - Git
+
+Для локального запуска Django вне Docker требуется Python 3.12.x.
 
 ## Первоначальная настройка
 
@@ -18,37 +19,60 @@
 cp .env.example .env
 ```
 
-3. Запустить базу данных:
+3. Запустить приложение и базу данных:
 
 ```bash
-docker compose up -d
+docker compose up --build -d
 ```
 
-4. Создать виртуальное окружение:
+4. Выполнить миграции базы данных:
 
 ```bash
-python3.12 -m venv .venv
+docker compose exec web python manage.py migrate
 ```
 
-5. Активировать виртуальное окружение:
+5. Открыть приложение в браузере:
 
-```bash
-source .venv/bin/activate
-```
+http://localhost:8000
 
-6. Установить зависимости:
+## Проверка состояния
 
-```bash
-pip install -r requirements.txt
-```
-
-## Проверка базы данных
-
-Проверить состояние контейнера:
+Проверить состояние контейнеров:
 
 ```bash
 docker compose ps
 ```
 
-Контейнер базы данных должен иметь статус `healthy`.
+Контейнер базы данных должен иметь статус `healthy`, а контейнер приложения — `Up`.
 
+## Полезные команды
+
+Запустить контейнеры:
+
+```bash
+docker compose up -d
+```
+
+Остановить контейнеры:
+
+```bash
+docker compose down
+```
+
+Посмотреть логи приложения:
+
+```bash
+docker compose logs -f web
+```
+
+Посмотреть логи базы данных:
+
+```bash
+docker compose logs -f db
+```
+
+Перезапустить приложение:
+
+```bash
+docker compose restart web
+```
