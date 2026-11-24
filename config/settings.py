@@ -106,3 +106,18 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 AUTH_USER_MODEL = "accounts.User"
+
+
+
+CONSENT_VERSION = "v0"  # текст согласия 
+
+PASSWORD_POLICY = {
+    "min_length": 8,
+    "require_digit": True,
+    "require_special": True,
+    "special_chars": "!@#$%^&*-_+",
+}
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "accounts.validators.PasswordPolicyValidator"},
+]
