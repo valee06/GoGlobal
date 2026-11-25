@@ -121,3 +121,18 @@ PASSWORD_POLICY = {
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "accounts.validators.PasswordPolicyValidator"},
 ]
+
+#  Почта: локальный приёмник до готовности SMTP Арега 
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)  # письма печатаются в консоль runserver — это и есть локальный приёмник
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@goglobal.local")
+
+# Параметры кодов и лимитов 
+EMAIL_CODE_TTL_MINUTES = 10        # код подтверждения
+RESET_CODE_TTL_MINUTES = 12        # код восстановления
+CODE_MAX_ATTEMPTS = 3              
+LOGIN_MAX_ATTEMPTS = 10            # подряд
+LOGIN_LOCK_MINUTES = 3             # пауза после 10 подряд
+
+LOGIN_URL = "/auth/login/"

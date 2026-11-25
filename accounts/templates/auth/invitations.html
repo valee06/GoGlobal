@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>Приглашения — GoGlobal</title></head>
+<body>
+  <h1>Приглашения студентов</h1>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create">
+    <button type="submit">Создать код</button>
+  </form>
+  <ul>
+    {% for inv in codes %}
+      <li>
+        <b>{{ inv.code }}</b>
+        — до {{ inv.expires_at|date:"d.m.Y" }}
+        {% if inv.is_revoked %}(отозван){% elif inv.expires_at < now %}(истёк){% else %}(действует){% endif %}
+        {% if not inv.is_revoked %}
+          <form method="post" style="display:inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="revoke">
+            <input type="hidden" name="invitation_id" value="{{ inv.pk }}">
+            <button type="submit">Отозвать</button>
+          </form>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li>Кодов пока нет</li>
+    {% endfor %}
+  </ul>
+  <p><a href="/">В кабинет</a></p>
+</body>
+</html>

@@ -1,6 +1,9 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+import secrets
+from django.conf import settings
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -42,6 +45,12 @@ class User(AbstractUser):
 
     objects = UserManager()
 
+    @property
+    def profile_complete(self):
+        if self.role != self.Role.STUDENT:
+            return True
+        return bool(self.full_name.strip())
+
 
 class StudentProfile(models.Model):
     user = models.OneToOneField(
@@ -59,3 +68,51 @@ class CuratorProfile(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="curator_profile"
     )
+
+
+class Invitation(models.Model):
+    """Код куратора для регистрации студента."""
+    code = models.CharField(max_length=12, unique=True)
+    curator = models.ForeignKey("User", on_delete=models.CASCADE, related_name="invitations")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_revoked = models.BooleanField(default=False)
+
+    @classmethod
+    def generate_code(cls):
+        return secrets.token_hex(4).upper()  # 8 символов: "9F3AC2E1"
+
+    def is_valid(self):
+        return not self.is_revoked and timezone.now() < self.expires_at
+
+
+class OneTimeCode(models.Model):
+    """Одноразовый код: подтверждение email или сброс пароля."""
+    class Purpose(models.TextChoices):
+        EMAIL_VERIFY = "email_verify", "Подтверждение email"
+        PASSWORD_RESET = "password_reset", "Сброс пароля"
+
+    user = models.ForeignKey("User", on_delete=models.CASCADE, related_name="one_time_codes")
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    code = models.CharField(max_length=6)  # не число а строка
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @classmethod
+    def generate(cls, user, purpose, ttl_minutes):
+        # атомарно гасим прежние активные коды того же назначения
+        cls.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(
+            used_at=timezone.now()
+        )
+        return cls.objects.create(
+            user=user, purpose=purpose,
+            code=str(secrets.randbelow(900000) + 100000),  # 100000–999999 (D02)
+            expires_at=timezone.now() + timezone.timedelta(minutes=ttl_minutes),
+        )
+
+    def is_usable(self):
+        return (self.used_at is None
+                and timezone.now() < self.expires_at
+                and self.attempts < settings.CODE_MAX_ATTEMPTS)

@@ -27,7 +27,7 @@ class StaffRegistrationTests(TestCase):
         """Позитивный сценарий: создан, но без автодоступа (FR-22, FR-27)."""
         response = self.client.post(REGISTER_URL, VALID)
 
-        self.assertRedirects(response, PENDING_URL)
+        self.assertRedirects(response, "/auth/email/verify/")
         user = User.objects.get(email="curator@example.com")
         self.assertEqual(user.role, User.Role.CURATOR)
         self.assertEqual(user.full_name, "Тестовый Куратор")
@@ -47,6 +47,11 @@ class StaffRegistrationTests(TestCase):
     def test_duplicate_email_rejected(self):
         """Повторный email не создаёт второй аккаунт (FR-22, D12)."""
         self.client.post(REGISTER_URL, VALID)
+        # первый пользователь подтвердил почту — теперь email занят по-настоящему
+        u = User.objects.get(email=VALID["email"])
+        u.email_verified = True
+        u.save()
+
         response = self.client.post(REGISTER_URL, {**VALID, "full_name": "Другой Человек"})
 
         self.assertEqual(User.objects.count(), 1)
@@ -113,3 +118,211 @@ class ApproveUserCommandTests(TestCase):
     def test_unknown_email_rejected(self):
         with self.assertRaises(CommandError):
             self.call("ghost@example.com", "--by", "Иля", "--approve")
+
+
+from datetime import timedelta
+
+from django.core.cache import cache
+from django.utils import timezone
+
+from .models import Invitation, OneTimeCode, User
+
+
+def make_curator():
+    """Одобренный куратор — владелец кодов приглашений."""
+    curator = User.objects.create_user(
+        email="curator@example.com", password="Passw0rd!",
+        role=User.Role.CURATOR, is_approved=True,
+    )
+    curator.email_verified = True
+    curator.save()
+    return curator
+
+
+def make_invitation(curator, code="TESTCODE1"):
+    return Invitation.objects.create(
+        code=code, curator=curator,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+
+def make_student(email="student@example.com"):
+    """Подтверждённый студент с заполненной анкетой."""
+    user = User.objects.create_user(
+        email=email, password="Passw0rd!",
+        role=User.Role.STUDENT, is_approved=True,
+        full_name="Тестов Студент",
+    )
+    user.email_verified = True
+    user.save()
+    return user
+
+
+class StudentRegistrationTests(TestCase):
+
+    def test_invalid_invitation_code_rejected(self):
+        make_invitation(make_curator())
+        self.client.post("/auth/register/student/", {
+            "invitation_code": "WRONGCODE",
+            "email": "s@example.com",
+            "password": "Passw0rd!",
+            "consent_personal_data": "on",
+        })
+        self.assertFalse(User.objects.filter(email="s@example.com").exists())
+
+    def test_valid_code_creates_student_and_sends_code(self):
+        make_invitation(make_curator())
+        response = self.client.post("/auth/register/student/", {
+            "invitation_code": "TESTCODE1",
+            "email": "s@example.com",
+            "password": "Passw0rd!",
+            "consent_personal_data": "on",
+        })
+        user = User.objects.get(email="s@example.com")
+        self.assertEqual(user.role, User.Role.STUDENT)
+        self.assertTrue(user.is_approved)        # студенту approve не нужен
+        self.assertFalse(user.email_verified)    # но почту подтвердить надо
+        self.assertTrue(OneTimeCode.objects.filter(
+            user=user, purpose="email_verify",
+        ).exists())
+
+    def test_revoked_code_rejected(self):
+        inv = make_invitation(make_curator())
+        inv.is_revoked = True
+        inv.save()
+        self.client.post("/auth/register/student/", {
+            "invitation_code": "TESTCODE1",
+            "email": "s@example.com",
+            "password": "Passw0rd!",
+            "consent_personal_data": "on",
+        })
+        self.assertFalse(User.objects.filter(email="s@example.com").exists())
+
+
+class EmailVerificationTests(TestCase):
+
+    def register_student(self):
+        make_invitation(make_curator())
+        self.client.post("/auth/register/student/", {
+            "invitation_code": "TESTCODE1",
+            "email": "s@example.com",
+            "password": "Passw0rd!",
+            "consent_personal_data": "on",
+        })
+        return User.objects.get(email="s@example.com")
+
+    def test_correct_code_verifies_email(self):
+        user = self.register_student()
+        code = OneTimeCode.objects.get(user=user, purpose="email_verify")
+        self.client.post("/auth/email/verify/", {"code": code.code})
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+
+    def test_code_dies_after_three_wrong_attempts(self):
+        user = self.register_student()
+        code = OneTimeCode.objects.get(user=user, purpose="email_verify")
+        wrong = "000000" if code.code != "000000" else "000001"
+        for _ in range(3):
+            self.client.post("/auth/email/verify/", {"code": wrong})
+        code.refresh_from_db()
+        self.assertFalse(code.is_usable())       # код мёртв
+        # даже правильный код больше не сработает
+        self.client.post("/auth/email/verify/", {"code": code.code})
+        user.refresh_from_db()
+        self.assertFalse(user.email_verified)
+
+
+class LoginLockoutTests(TestCase):
+
+    def test_ten_failures_lock_login(self):
+        make_student()
+        for _ in range(10):
+            self.client.post("/auth/login/", {
+                "email": "student@example.com", "password": "WrongPass1!",
+            })
+        # теперь даже правильный пароль не пускает
+        self.client.post("/auth/login/", {
+            "email": "student@example.com", "password": "Passw0rd!",
+        })
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/auth/login", response.url)  # не залогинен
+
+
+class PasswordResetTests(TestCase):
+
+    def test_request_creates_code_for_known_email_only(self):
+        make_student()
+        self.client.post("/auth/password/reset/request/",
+                         {"email": "student@example.com"})
+        self.assertTrue(OneTimeCode.objects.filter(
+            purpose="password_reset",
+        ).exists())
+
+    def test_unknown_email_gives_same_answer_and_no_code(self):
+        response = self.client.post("/auth/password/reset/request/",
+                                    {"email": "nobody@example.com"})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(OneTimeCode.objects.filter(
+            purpose="password_reset",
+        ).exists())
+
+    def test_reset_changes_password_and_kills_sessions(self):
+        user = make_student()
+        self.client.login(email="student@example.com", password="Passw0rd!")
+        self.client.post("/auth/password/reset/request/",
+                         {"email": "student@example.com"})
+        code = OneTimeCode.objects.get(purpose="password_reset")
+        self.client.post("/auth/password/reset/confirm/", {
+            "email": "student@example.com",
+            "code": code.code,
+            "new_password": "N3wPass!word",
+            "new_password_confirm": "N3wPass!word",
+        })
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("N3wPass!word"))
+        # старая сессия умерла — главная снова ведёт на вход
+        response = self.client.get("/")
+        self.assertIn("/auth/login", response.url)
+
+
+class StudentProfileTests(TestCase):
+
+    def test_student_without_fullname_redirected_to_profile(self):
+        user = User.objects.create_user(
+            email="s@example.com", password="Passw0rd!",
+            role=User.Role.STUDENT, is_approved=True,
+        )
+        user.email_verified = True
+        user.save()
+        self.client.login(email="s@example.com", password="Passw0rd!")
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/profile/student", response.url)
+
+    def test_unverified_email_can_be_reused(self):
+        User.objects.create_user(email="ghost@example.com", password="Passw0rd!")
+        self.client.post("/auth/register/staff/", {
+            "full_name": "Новый Человек",
+            "email": "ghost@example.com",
+            "password": "N3wPass!word",
+            "role": "buddy",
+            "consent_personal_data": "on",
+        })
+        self.assertEqual(User.objects.filter(email="ghost@example.com").count(), 1)
+        self.assertEqual(
+            User.objects.get(email="ghost@example.com").full_name, "Новый Человек",
+        )
+
+    def test_verified_email_stays_unique(self):
+        u = User.objects.create_user(email="real@example.com", password="Passw0rd!")
+        u.email_verified = True
+        u.save()
+        response = self.client.post("/auth/register/staff/", {
+            "full_name": "Самозванец",
+            "email": "real@example.com",
+            "password": "N3wPass!word",
+            "role": "buddy",
+            "consent_personal_data": "on",
+        })
+        self.assertContains(response, "уже зарегистрирован")
