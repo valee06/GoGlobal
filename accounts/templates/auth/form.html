@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>{{ heading }} — GoGlobal</title></head>
+<body>
+  <h1>{{ heading }}</h1>
+  {% if message %}<p>{{ message }}</p>{% endif %}
+  {% if form %}
+    {% if form.non_field_errors %}
+      <div style="border:1px solid red;padding:8px">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+        <p>{{ field.label_tag }} {{ field }} {{ field.errors }}</p>
+      {% endfor %}
+      <button type="submit">{{ button|default:"Отправить" }}</button>
+    </form>
+  {% endif %}
+  <hr>
+  <p>
+    <a href="{% url 'auth:login' %}">Вход</a> ·
+    <a href="{% url 'auth:register_student' %}">Регистрация по коду</a> ·
+    <a href="{% url 'auth:register_staff' %}">Регистрация куратора/buddy</a> ·
+    <a href="{% url 'auth:reset_request' %}">Забыли пароль</a>
+  </p>
+</body>
+</html>
