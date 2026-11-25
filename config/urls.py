@@ -7,4 +7,5 @@ urlpatterns = [
     path("auth/", include("accounts.urls")),
     path("", account_views.home, name="home"),
     path("profile/student/", account_views.profile_student, name="profile_student"),
+    path("exchange/", include("exchange.urls")),
 ]

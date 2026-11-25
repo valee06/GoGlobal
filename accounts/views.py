@@ -14,6 +14,7 @@ from .forms import (EmailCodeForm, LoginForm, ResetConfirmForm,
 from .models import OneTimeCode, User, Invitation, StudentProfile
 from .services import (kill_user_sessions, login_locked,
                        register_login_failure, reset_login_failures)
+from .decorators import curator_required
 
 GENERIC_ERROR = "Не удалось войти. Проверьте данные для входа"
 
@@ -64,7 +65,9 @@ def register_student(request):
                 consent_version=settings.CONSENT_VERSION,
                 consented_at=timezone.now(),
             )
-            StudentProfile.objects.get_or_create(user=user)
+            profile, _ = StudentProfile.objects.get_or_create(user=user)
+            profile.curator = form.invitation.curator
+            profile.save()
             try:
                 _start_verification(request, user)
             except MailSendError:
@@ -123,17 +126,6 @@ def verify_email(request):
         "form": form, "button": "Подтвердить",
         "heading": f"Введите код из письма, отправленного на {user.email}",
     })
-
-
-def curator_required(view):
-    """Только одобренный куратор (остальных — на home)."""
-    @login_required
-    def wrapper(request, *args, **kwargs):
-        u = request.user
-        if u.role != User.Role.CURATOR or not u.is_approved:
-            return redirect("home")
-        return view(request, *args, **kwargs)
-    return wrapper
 
 
 @require_POST
