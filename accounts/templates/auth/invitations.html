@@ -1,32 +1,92 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>Приглашения — GoGlobal</title></head>
-<body>
-  <h1>Приглашения студентов</h1>
+{% extends "auth/base.html" %}
+
+{% block title %}Приглашения студентов — GoGlobal{% endblock %}
+
+{% block content %}
+<section
+  class="auth-card invitations-card"
+  aria-labelledby="invitations-heading"
+>
+  <h1 id="invitations-heading" class="auth-heading">
+    Приглашения студентов
+  </h1>
+
+  <p class="auth-message">
+    Создайте код и передайте его студенту.
+    При регистрации студент введёт его в поле «Код куратора».
+    Срок действия кода — 7 дней.
+  </p>
+
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="create">
-    <button type="submit">Создать код</button>
+
+    <button class="primary-button" type="submit">
+      Создать код
+    </button>
   </form>
-  <ul>
+
+  <ul class="invitation-list">
     {% for inv in codes %}
-      <li>
-        <b>{{ inv.code }}</b>
-        — до {{ inv.expires_at|date:"d.m.Y" }}
-        {% if inv.is_revoked %}(отозван){% elif inv.expires_at < now %}(истёк){% else %}(действует){% endif %}
-        {% if not inv.is_revoked %}
-          <form method="post" style="display:inline">
+      <li class="invitation-item">
+        <div class="invitation-details">
+          <span class="field-help">Код приглашения</span>
+          <strong class="invitation-code">{{ inv.code }}</strong>
+
+          <p class="invitation-expiry">
+            Действует до
+            <time datetime="{{ inv.expires_at|date:'c' }}">
+              {{ inv.expires_at|date:"d.m.Y H:i T" }}
+            </time>
+          </p>
+
+          {% if inv.is_revoked %}
+            <span class="invitation-status status-inactive">
+              Отозван
+            </span>
+          {% elif inv.expires_at <= now %}
+            <span class="invitation-status status-inactive">
+              Срок истёк
+            </span>
+          {% else %}
+            <span class="invitation-status status-active">
+              Действует
+            </span>
+          {% endif %}
+        </div>
+
+        {% if not inv.is_revoked and inv.expires_at > now %}
+          <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="revoke">
-            <input type="hidden" name="invitation_id" value="{{ inv.pk }}">
-            <button type="submit">Отозвать</button>
+            <input
+              type="hidden"
+              name="invitation_id"
+              value="{{ inv.pk }}"
+            >
+
+            <button
+              class="secondary-button"
+              type="submit"
+              aria-label="Отозвать код {{ inv.code }}"
+            >
+              Отозвать
+            </button>
           </form>
         {% endif %}
       </li>
     {% empty %}
-      <li>Кодов пока нет</li>
+      <li class="invitation-empty">
+        Пока нет кодов приглашений.
+        Нажмите «Создать код», чтобы получить первый.
+      </li>
     {% endfor %}
   </ul>
-  <p><a href="/">В кабинет</a></p>
-</body>
-</html>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a class="secondary-button" href="{% url 'home' %}">
+      В кабинет
+    </a>
+  </nav>
+</section>
+{% endblock %}

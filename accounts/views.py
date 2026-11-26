@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+from django.utils.translation import gettext as _
 
 from .emails import MailSendError, send_code_email
 from .forms import (EmailCodeForm, LoginForm, ResetConfirmForm,
@@ -16,37 +17,92 @@ from .services import (kill_user_sessions, login_locked,
                        register_login_failure, reset_login_failures)
 from .decorators import curator_required
 
+from django.contrib import messages
+from .codes import (
+    CodeRateLimit,
+    check_code,
+    send_code_limited,
+    wait_before_resend,
+)              
+
+from django.db import transaction
+
 GENERIC_ERROR = "Не удалось войти. Проверьте данные для входа"
 
 
 def _start_verification(request, user):
-    """Создать код, отправить письмо, положить контекст в сессию."""
-    code = OneTimeCode.generate(user, OneTimeCode.Purpose.EMAIL_VERIFY,
-                                settings.EMAIL_CODE_TTL_MINUTES)
-    send_code_email(user.email, code.code, "email_verify")
     request.session["pending_verify_user_id"] = user.pk
+
+    send_code_limited(
+        user,
+        OneTimeCode.Purpose.EMAIL_VERIFY,
+        settings.EMAIL_CODE_TTL_MINUTES,
+    )
 
 
 def register_staff(request):
+    selected_role = (
+        request.GET.get("role")
+        or request.POST.get("role")
+    )
+
+    if selected_role not in (
+        User.Role.CURATOR,
+        User.Role.BUDDY,
+    ):
+        return redirect(
+            "auth:choose_role",
+            mode="register",
+        )
+
+    if selected_role == User.Role.CURATOR:
+        heading = "Регистрация куратора"
+    else:
+        heading = "Регистрация buddy"
+
     if request.method == "POST":
-        form = StaffRegistrationForm(request.POST)
+        form = StaffRegistrationForm(
+            request.POST,
+            selected_role=selected_role,
+        )
+
         if form.is_valid():
             old = getattr(form, "_replaces_user", None)
             if old:
-                old.delete()
+                old.delete()  # стираем неподтверждённый аккаунт с этой почтой
             user = form.save()
+
             try:
                 _start_verification(request, user)
             except MailSendError:
-                return render(request, "auth/form.html", {
-                    "heading": "Не удалось отправить письмо",
-                    "message": "Регистрация сохранена. Попробуйте запросить код позже.",
-                })
+                return render(
+                    request,
+                    "auth/form.html",
+                    {
+                        "heading": "Не удалось отправить письмо",
+                        "message": (
+                            "Регистрация сохранена. "
+                            "Попробуйте запросить код позже."
+                        ),
+                    },
+                )
+
             return redirect("auth:verify_email")
+
     else:
-        form = StaffRegistrationForm()
-    return render(request, "auth/form.html",
-                  {"form": form, "heading": "Регистрация", "button": "Зарегистрироваться"})
+        form = StaffRegistrationForm(
+            selected_role=selected_role,
+        )
+
+    return render(
+        request,
+        "auth/form.html",
+        {
+            "form": form,
+            "heading": heading,
+            "button": "Зарегистрироваться",
+        },
+    )
 
 
 def register_student(request):
@@ -84,19 +140,7 @@ def register_student(request):
 
 
 def _check_code(user, purpose, code_str):
-    """Общая проверка кода: срок, попытки, одноразовость (D03/D04)."""
-    code = (OneTimeCode.objects
-            .filter(user=user, purpose=purpose, used_at__isnull=True)
-            .order_by("-created_at").first())
-    if not code or not code.is_usable():
-        return None
-    code.attempts += 1
-    code.save(update_fields=["attempts"])
-    if code.code != code_str:
-        return None
-    code.used_at = timezone.now()
-    code.save(update_fields=["used_at"])
-    return code
+    return check_code(user, purpose, code_str)
 
 
 def verify_email(request):
@@ -116,36 +160,77 @@ def verify_email(request):
                 user.email_verified = True
                 user.save(update_fields=["email_verified"])
                 request.session.pop("pending_verify_user_id", None)
-                # TODO: когда Арег добавит send_approval_request — вызвать здесь
-                # для curator/buddy с is_approved=False
+
+                # Уведомление команде об одобрении подключим отдельно.
+                if (
+                    user.role in (User.Role.CURATOR, User.Role.BUDDY)
+                    and not user.is_approved
+                ):
+                    request.session["pending_approval_user_id"] = user.pk
+                    return redirect("auth:pending")
+
                 return redirect("auth:login")
             form.add_error("code", "Код неверный или больше не действует")
     else:
         form = EmailCodeForm()
+
     return render(request, "auth/form.html", {
-        "form": form, "button": "Подтвердить",
-        "heading": f"Введите код из письма, отправленного на {user.email}",
+        "form": form,
+        "button": "Подтвердить",
+        "heading": _("Подтверждение электронной почты"),
+        "message": _(
+            "Введите код для адреса %(email)s. "
+            "Проверьте входящие и папку «Спам»."
+        ) % {"email": user.email},
+        "resend_wait": wait_before_resend(
+            user,
+            OneTimeCode.Purpose.EMAIL_VERIFY,
+        ),
     })
 
 
 @require_POST
 def resend_code(request):
-    """C04: перевыпуск кода. D05: старый гасим только вместе с созданием нового."""
     user_id = request.session.get("pending_verify_user_id")
+
     if not user_id:
         return redirect("auth:login")
-    user = User.objects.filter(pk=user_id).first()
-    if not user:
+
+    user = User.objects.filter(
+        pk=user_id,
+        email_verified=False,
+    ).first()
+
+    if user is None:
+        request.session.pop("pending_verify_user_id", None)
         return redirect("auth:login")
+
     try:
-        code = OneTimeCode.generate(user, OneTimeCode.Purpose.EMAIL_VERIFY,
-                                    settings.EMAIL_CODE_TTL_MINUTES)
-        send_code_email(user.email, code.code, "email_verify")
+        send_code_limited(
+            user,
+            OneTimeCode.Purpose.EMAIL_VERIFY,
+            settings.EMAIL_CODE_TTL_MINUTES,
+        )
+
+    except CodeRateLimit as exc:
+        messages.error(
+            request,
+            _("Запросите новый код через %(seconds)s сек.")
+            % {"seconds": exc.seconds},
+        )
+
     except MailSendError:
-        return render(request, "auth/form.html", {
-            "heading": "Не удалось отправить письмо",
-            "message": "Попробуйте ещё раз позже. Прежний код продолжает действовать.",
-        })
+        messages.error(
+            request,
+            _("Не удалось отправить письмо. Попробуйте позже."),
+        )
+
+    else:
+        messages.success(
+            request,
+            _("Новый код отправлен. Предыдущий больше не действует."),
+        )
+
     return redirect("auth:verify_email")
 
 
@@ -169,9 +254,11 @@ def login_view(request):
             else:
                 reset_login_failures(email)
                 if not user.email_verified:
-                    form.add_error(None, "Подтвердите электронную почту — код уже отправлен")
+                    request.session["pending_verify_user_id"] = user.pk
+                    return redirect("auth:verify_email")
                 elif user.role != User.Role.STUDENT and not user.is_approved:
-                    form.add_error(None, "Регистрация ожидает проверки командой проекта")
+                    request.session["pending_approval_user_id"] = user.pk
+                    return redirect("auth:pending")
                 else:
                     login(request, user)
                     nxt = request.GET.get("next", "")
@@ -186,57 +273,214 @@ def login_view(request):
 
 @require_POST
 def logout_view(request):
-    """C06: выход только POST, сессия аннулируется на сервере."""
+    """Выход с аннулированием сессии и сохранением языка."""
+    language = getattr(request, "ui_language", "ru")
+
     logout(request)
+
+    request.session["auth_ui_language"] = (
+        language if language in ("ru", "en") else "ru"
+    )
+
     return redirect("auth:login")
 
 
+def _reset_grant_valid(code):
+    if (
+        code is None
+        or code.purpose != OneTimeCode.Purpose.PASSWORD_RESET
+        or code.used_at is None
+        or code.reset_completed_at is not None
+        or timezone.now() >= code.expires_at
+        or not code.user.is_active
+        or not code.user.email_verified
+    ):
+        return False
+
+    latest_id = (
+        OneTimeCode.objects.filter(
+            user_id=code.user_id,
+            purpose=OneTimeCode.Purpose.PASSWORD_RESET,
+        )
+        .order_by("-created_at", "-pk")
+        .values_list("pk", flat=True)
+        .first()
+    )
+
+    return latest_id == code.pk
+
+
+def _restart_reset(request):
+    request.session.pop("password_reset_grant", None)
+
+    messages.error(
+        request,
+        _("Восстановление недоступно. Запросите новый код."),
+    )
+
+    return redirect("auth:reset_request")
+
+
 def reset_request(request):
-    """одинаковый ответ для любого адреса — не раскрываем аккаунт."""
-    message = "Если адрес зарегистрирован, мы отправим инструкцию по восстановлению"
     if request.method == "POST":
         form = ResetRequestForm(request.POST)
+
         if form.is_valid():
+            email = form.cleaned_data["email"].strip().lower()
+            request.session["pending_reset_email"] = email
+
             user = User.objects.filter(
-                email__iexact=form.cleaned_data["email"], is_active=True).first()
+                email__iexact=email,
+                is_active=True,
+                email_verified=True,
+            ).first()
+
             if user:
                 try:
-                    code = OneTimeCode.generate(
-                        user, OneTimeCode.Purpose.PASSWORD_RESET,
-                        settings.RESET_CODE_TTL_MINUTES)
-                    send_code_email(user.email, code.code, "password_reset")
-                except MailSendError:
-                    pass  # публичный ответ не меняется (C07)
-            return render(request, "auth/form.html",
-                          {"heading": "Проверьте почту", "message": message})
+                    send_code_limited(
+                        user,
+                        OneTimeCode.Purpose.PASSWORD_RESET,
+                        settings.RESET_CODE_TTL_MINUTES,
+                    )
+                except (MailSendError, CodeRateLimit):
+                    pass
+
+            return redirect("auth:reset_verify")
+
     else:
         form = ResetRequestForm()
-    return render(request, "auth/form.html",
-                  {"form": form, "heading": "Восстановление пароля",
-                   "button": "Отправить код"})
+
+    return render(request, "auth/form.html", {
+        "form": form,
+        "heading": _("Восстановление пароля"),
+        "button": _("Отправить код"),
+    })
+
+
+def reset_verify(request):
+    email = request.session.get("pending_reset_email")
+
+    if not email:
+        return redirect("auth:reset_request")
+
+    if request.method == "POST":
+        form = EmailCodeForm(request.POST)
+
+        if form.is_valid():
+            user = User.objects.filter(
+                email__iexact=email,
+                is_active=True,
+                email_verified=True,
+            ).first()
+
+            code = None
+
+            if user:
+                code = _check_code(
+                    user,
+                    OneTimeCode.Purpose.PASSWORD_RESET,
+                    form.cleaned_data["code"],
+                )
+
+            if code:
+                request.session["password_reset_grant"] = {
+                    "code_id": code.pk,
+                }
+                request.session.pop("pending_reset_email", None)
+
+                return redirect("auth:reset_confirm")
+
+            form.add_error(
+                "code",
+                _("Код неверный или больше не действует"),
+            )
+
+    else:
+        form = EmailCodeForm()
+
+    return render(request, "auth/form.html", {
+        "form": form,
+        "heading": _("Код восстановления"),
+        "message": _(
+            "Если адрес зарегистрирован, мы отправим инструкцию по восстановлению"
+        ),
+        "button": _("Установить новый пароль"),
+    })
 
 
 def reset_confirm(request):
-    """смена пароля по коду, отзыв всех сессий."""
+    grant = request.session.get("password_reset_grant", {})
+
+    code = (
+        OneTimeCode.objects.select_related("user")
+        .filter(
+            pk=grant.get("code_id"),
+            purpose=OneTimeCode.Purpose.PASSWORD_RESET,
+        )
+        .first()
+    )
+
+    if not _reset_grant_valid(code):
+        return _restart_reset(request)
+
     if request.method == "POST":
         form = ResetConfirmForm(request.POST)
+
         if form.is_valid():
-            user = User.objects.filter(
-                email__iexact=form.cleaned_data["email"], is_active=True).first()
-            ok = user and _check_code(user, OneTimeCode.Purpose.PASSWORD_RESET,
-                                      form.cleaned_data["code"])
-            if not ok:
-                form.add_error("code", "Код неверный или больше не действует")
-            else:
-                user.set_password(form.cleaned_data["new_password"])
-                user.save(update_fields=["password"])
-                kill_user_sessions(user)  # прежние сессии аннулированы
-                return redirect("auth:login")
+            changed = False
+
+            with transaction.atomic():
+                user = (
+                    User.objects.select_for_update()
+                    .filter(pk=code.user_id)
+                    .first()
+                )
+
+                fresh_code = (
+                    OneTimeCode.objects.select_related("user")
+                    .filter(pk=code.pk)
+                    .first()
+                )
+
+                if user and _reset_grant_valid(fresh_code):
+                    user.set_password(
+                        form.cleaned_data["new_password"]
+                    )
+                    user.save(update_fields=["password"])
+
+                    fresh_code.reset_completed_at = timezone.now()
+                    fresh_code.save(
+                        update_fields=["reset_completed_at"]
+                    )
+
+                    kill_user_sessions(user)
+                    changed = True
+
+            if not changed:
+                return _restart_reset(request)
+
+            language = getattr(request, "ui_language", "ru")
+
+            logout(request)
+            request.session["auth_ui_language"] = language
+
+            messages.success(
+                request,
+                _("Пароль обновлён. Войдите с новым паролем."),
+            )
+
+            return redirect("auth:login")
+
     else:
         form = ResetConfirmForm()
-    return render(request, "auth/form.html",
-                  {"form": form, "heading": "Новый пароль", "button": "Сохранить"})
 
+    return render(request, "auth/form.html", {
+        "form": form,
+        "heading": _("Новый пароль"),
+        "message": _("Введите новый пароль для %(email)s.")
+        % {"email": code.user.email},
+        "button": _("Обновить пароль"),
+    })
 
 @login_required
 def profile_student(request):
@@ -257,8 +501,50 @@ def profile_student(request):
 
 
 def pending(request):
-    return render(request, "auth/form.html", {
-        "heading": "Регистрация ожидает проверки командой проекта"})
+    user_id = request.session.get("pending_approval_user_id")
+
+    if not user_id:
+        return redirect("auth:login")
+
+    user = User.objects.filter(
+        pk=user_id,
+        role__in=(User.Role.CURATOR, User.Role.BUDDY),
+        email_verified=True,
+        is_active=True,
+    ).first()
+
+    if user is None:
+        request.session.pop("pending_approval_user_id", None)
+        return redirect("auth:login")
+
+    english = (
+        user.role == User.Role.BUDDY
+        or getattr(request, "ui_language", "ru") == "en"
+    )
+
+    if english:
+        request.session["auth_ui_language"] = "en"
+
+    if user.is_approved:
+        request.session.pop("pending_approval_user_id", None)
+
+        messages.success(
+            request,
+            "Your account has been approved. Log in to continue."
+            if english
+            else "Ваш аккаунт одобрен. Войдите, чтобы продолжить.",
+        )
+
+        return redirect("auth:login")
+
+    return render(
+        request,
+        "auth/pending.html",
+        {
+            "pending_english": english,
+            "ui_language": "en" if english else "ru",
+        },
+    )
 
 
 @login_required
@@ -288,3 +574,67 @@ def invitations(request):
         return redirect("auth:invitations")
     codes = Invitation.objects.filter(curator=request.user).order_by("-created_at")
     return render(request, "auth/invitations.html", {"codes": codes, "now": timezone.now()})
+
+
+def entry_page(request, mode="welcome"):
+    from urllib.parse import urlencode
+    from django.urls import reverse
+
+    if mode not in ("welcome", "login", "register"):
+        return redirect("welcome")
+
+    language = getattr(request, "ui_language", "ru")
+
+    english = language == "en"
+
+    if mode == "login":
+        heading = "Log in as" if english else "Войти как"
+    elif mode == "register":
+        heading = "Sign up as" if english else "Зарегистрироваться как"
+    else:
+        heading = "GoGlobal"
+
+    roles = []
+
+    for role, ru_label, en_label in [
+        ("curator", "Куратор", "Curator"),
+        ("student", "Студент", "Student"),
+        ("buddy", "Buddy", "Buddy"),
+    ]:
+        if mode == "login":
+            target = reverse("auth:login")
+        elif role == "student":
+            target = reverse("auth:register_student")
+        else:
+            target = reverse("auth:register_staff")
+
+        roles.append({
+            "name": role,
+            "label": en_label if english else ru_label,
+            "url": target + "?" + urlencode({
+                "role": role,
+                "lang": language,
+            }),
+        })
+
+    return render(request, "auth/entry.html", {
+        "mode": mode,
+        "heading": heading,
+        "ui_language": language,
+        "english": english,
+        "hide_header": True,
+        "roles": roles,
+        "login_url": reverse(
+            "auth:choose_role", kwargs={"mode": "login"}
+        ) + "?" + urlencode({"lang": language}),
+        "register_url": reverse(
+            "auth:choose_role", kwargs={"mode": "register"}
+        ) + "?" + urlencode({"lang": language}),
+        "back_url": reverse("welcome") + "?" + urlencode({
+            "lang": language,
+        }),
+    })
+
+
+def personal_data_consent(request):
+    return render(request, "auth/personal_data_consent.html")

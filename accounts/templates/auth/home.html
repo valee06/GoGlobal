@@ -1,14 +1,69 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>GoGlobal</title></head>
-<body>
-  <h1>Вы вошли как {{ user.email }} ({{ user.get_role_display }})</h1>
-  {% if user.role == "curator" %}
-    <p><a href="{% url 'auth:invitations' %}">Приглашения студентов</a></p>
+{% extends "auth/base.html" %}
+
+{% block title %}
+  {% if ui_language == "en" %}
+    My account
+  {% else %}
+    Личный кабинет
   {% endif %}
-  <form method="post" action="{% url 'auth:logout' %}">
-    {% csrf_token %}
-    <button type="submit">Выйти</button>
-  </form>
-</body>
-</html>
+  — GoGlobal
+{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="account-heading">
+  <h1 id="account-heading" class="auth-heading">
+    {% if ui_language == "en" %}
+      My account
+    {% else %}
+      Личный кабинет
+    {% endif %}
+  </h1>
+
+  <p class="auth-message">
+    {% if ui_language == "en" %}
+      You are logged in as
+    {% else %}
+      Вы вошли как
+    {% endif %}
+    <strong>{{ user.email }}</strong>
+  </p>
+
+  <p class="auth-message">
+    {% if ui_language == "en" %}
+      This is a temporary account page.
+      Other features will be added in future sprints.
+    {% else %}
+      Это временная страница личного кабинета.
+      Остальные функции появятся в следующих спринтах.
+    {% endif %}
+  </p>
+
+  {% if user.role == "curator" %}
+    <nav class="auth-navigation" aria-label="Действия куратора">
+      <a
+        class="secondary-button"
+        href="{% url 'auth:invitations' %}"
+      >
+        {% if ui_language == "en" %}
+          Student invitations
+        {% else %}
+          Приглашения студентов
+        {% endif %}
+      </a>
+    </nav>
+  {% endif %}
+
+  <div class="auth-navigation">
+    <form method="post" action="{% url 'auth:logout' %}">
+      {% csrf_token %}
+      <button class="secondary-button" type="submit">
+        {% if ui_language == "en" %}
+          Log out
+        {% else %}
+          Выйти
+        {% endif %}
+      </button>
+    </form>
+  </div>
+</section>
+{% endblock %}
