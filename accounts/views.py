@@ -8,6 +8,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .emails import MailResult, MailSendError, send_code_email, send_code_email_or_raise
+from .audit import record_domain_event
 from .forms import (EmailCodeForm, LoginForm, ResetConfirmForm,
                     ResetRequestForm, StaffRegistrationForm,
                     StudentProfileForm, StudentRegistrationForm)
@@ -180,38 +181,97 @@ def resend_code(request):
 
 
 def login_view(request):
-    """вход. Роль — только из БД, ошибка всегда общая."""
+    """Вход; фиксируем успехи и отказы без email и пароля."""
     if request.method == "POST":
         form = LoginForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data["email"]
+
             if login_locked(email):
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="authentication",
+                    result="denied",
+                    reason_code="login_locked",
+                    request_id=getattr(request, "event_id", None),
+                )
                 return render(request, "auth/form.html", {
                     "heading": "Слишком много попыток",
                     "message": f"Повторите через {settings.LOGIN_LOCK_MINUTES} минут "
                                f"или восстановите пароль.",
                 })
-            user = authenticate(request, username=email,
-                                password=form.cleaned_data["password"])
+
+            user = authenticate(
+                request,
+                username=email,
+                password=form.cleaned_data["password"],
+            )
+
             if user is None or not user.is_active:
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="authentication",
+                    result="denied",
+                    reason_code="bad_credentials",
+                    request_id=getattr(request, "event_id", None),
+                )
                 register_login_failure(email)
-                form.add_error(None, GENERIC_ERROR)  # без раскрытия аккаунта
+                form.add_error(None, GENERIC_ERROR)
+            elif not user.email_verified:
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="user",
+                    object_id=user.pk,
+                    actor_id=user.pk,
+                    result="denied",
+                    reason_code="email_unverified",
+                    request_id=getattr(request, "event_id", None),
+                )
+                form.add_error(
+                    None,
+                    "Подтвердите электронную почту — код уже отправлен",
+                )
+            elif user.role != User.Role.STUDENT and not user.is_approved:
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="user",
+                    object_id=user.pk,
+                    actor_id=user.pk,
+                    result="denied",
+                    reason_code="approval_pending",
+                    request_id=getattr(request, "event_id", None),
+                )
+                form.add_error(
+                    None,
+                    "Регистрация ожидает проверки командой проекта",
+                )
             else:
                 reset_login_failures(email)
-                if not user.email_verified:
-                    form.add_error(None, "Подтвердите электронную почту — код уже отправлен")
-                elif user.role != User.Role.STUDENT and not user.is_approved:
-                    form.add_error(None, "Регистрация ожидает проверки командой проекта")
-                else:
-                    login(request, user)
-                    nxt = request.GET.get("next", "")
-                    if nxt and url_has_allowed_host_and_scheme(nxt, {request.get_host()}):
-                        return redirect(nxt)
-                    return redirect("home")
+                login(request, user)
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="user",
+                    object_id=user.pk,
+                    actor_id=user.pk,
+                    result="success",
+                    request_id=getattr(request, "event_id", None),
+                )
+
+                nxt = request.GET.get("next", "")
+                if nxt and url_has_allowed_host_and_scheme(
+                    nxt,
+                    {request.get_host()},
+                ):
+                    return redirect(nxt)
+                return redirect("home")
     else:
         form = LoginForm()
-    return render(request, "auth/form.html",
-                  {"form": form, "heading": "Вход", "button": "Войти"})
+
+    return render(
+        request,
+        "auth/form.html",
+        {"form": form, "heading": "Вход", "button": "Войти"},
+    )
 
 
 @require_POST

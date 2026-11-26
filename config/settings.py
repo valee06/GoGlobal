@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
-from django.core.exceptions import ImproperlyConfigured
-
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import validate_email
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,6 +27,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    "config.middleware.RequestEventIdMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -140,6 +141,28 @@ if EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
             "Вне режима отладки SMTP должен использовать TLS или SSL."
         )
 
+if not 1 <= EMAIL_PORT <= 65535:
+    raise ImproperlyConfigured("EMAIL_PORT должен быть от 1 до 65535.")
+
+if EMAIL_TIMEOUT <= 0:
+    raise ImproperlyConfigured("EMAIL_TIMEOUT должен быть больше нуля.")
+
+try:
+    validate_email(DEFAULT_FROM_EMAIL)
+except ValidationError as exc:
+    raise ImproperlyConfigured(
+        "DEFAULT_FROM_EMAIL должен содержать корректный email."
+    ) from exc
+
+if (
+    EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend"
+    and not DEBUG
+    and (not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD)
+):
+    raise ImproperlyConfigured(
+        "Для SMTP вне режима отладки нужны логин и пароль."
+    )
+
 # Параметры кодов и лимитов
 EMAIL_CODE_TTL_MINUTES = 10        # код подтверждения
 RESET_CODE_TTL_MINUTES = 12        # код восстановления
@@ -148,3 +171,53 @@ LOGIN_MAX_ATTEMPTS = 10            # подряд
 LOGIN_LOCK_MINUTES = 3             # пауза после 10 подряд
 
 LOGIN_URL = "/auth/login/"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "safe": {
+            "()": "config.logging_utils.SafeLogFilter",
+        },
+    },
+    "formatters": {
+        "safe": {
+            "format": (
+                "%(asctime)s %(levelname)s %(name)s "
+                "event_id=%(event_id)s %(message)s"
+            ),
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["safe"],
+            "formatter": "safe",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "accounts": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+AUDIT_LOG_RETENTION_DAYS = int(
+    os.getenv("AUDIT_LOG_RETENTION_DAYS", "365")
+)
+
+if not 1 <= AUDIT_LOG_RETENTION_DAYS <= 3650:
+    raise ImproperlyConfigured(
+        "AUDIT_LOG_RETENTION_DAYS должен быть от 1 до 3650."
+    )
