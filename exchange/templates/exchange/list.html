@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>{{ heading }} — GoGlobal</title></head>
+<body>
+  <h1>{{ heading }}</h1>
+  {% if create_url %}<p><a href="{% url create_url %}">+ Создать</a></p>{% endif %}
+  <ul>
+    {% for obj in objects %}
+      <li>{{ obj }}</li>
+    {% empty %}
+      <li>Пока пусто.</li>
+    {% endfor %}
+  </ul>
+  <p><a href="{% url 'home' %}">На главную</a></p>
+</body>
+</html>
