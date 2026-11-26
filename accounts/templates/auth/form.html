@@ -1,27 +1,290 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>{{ heading }} — GoGlobal</title></head>
-<body>
-  <h1>{{ heading }}</h1>
-  {% if message %}<p>{{ message }}</p>{% endif %}
+{% extends "auth/base.html" %}
+{% load i18n static %}
+
+{% block title %}
+  {% translate heading|default:"GoGlobal" %} — GoGlobal
+{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="page-heading">
+  <h1 id="page-heading" class="auth-heading">
+    {% translate heading|default:"GoGlobal" %}
+  </h1>
+
+  {% if message %}
+    <p class="auth-message">{% translate message %}</p>
+  {% endif %}
+
+  {% if messages %}
+    {% for notice in messages %}
+      <div
+        class="notice {{ notice.tags }}"
+        role="{% if notice.level >= 40 %}alert{% else %}status{% endif %}"
+      >
+        {{ notice }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
   {% if form %}
     {% if form.non_field_errors %}
-      <div style="border:1px solid red;padding:8px">{{ form.non_field_errors }}</div>
+      <div class="form-alert" role="alert">
+        <ul class="errorlist">
+          {% for error in form.non_field_errors %}
+            <li>{% translate error %}</li>
+          {% endfor %}
+        </ul>
+      </div>
     {% endif %}
-    <form method="post">
+
+    <form method="post" class="auth-form" novalidate>
       {% csrf_token %}
+
+      <p class="required-note">
+        <span aria-hidden="true">*</span> —
+        {% translate "обязательное поле" %}
+      </p>
+
       {% for field in form %}
-        <p>{{ field.label_tag }} {{ field }} {{ field.errors }}</p>
+        {% if field.is_hidden %}
+          {{ field }}
+
+          {% if field.errors %}
+            <div class="form-alert" role="alert">
+              {% for error in field.errors %}
+                <p>{% translate error %}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+        {% else %}
+          <div class="field-row{% if field.errors %} has-error{% endif %}">
+            <div class="field-main">
+              {% if field.field.widget.input_type == "checkbox" %}
+                <div class="checkbox-row">
+                  {{ field }}
+
+                  <div>
+                    <label for="{{ field.id_for_label }}">
+                      {% if ui_language == "en" %}
+                        I agree to
+                      {% else %}
+                        Я даю согласие на
+                      {% endif %}
+                    </label>
+
+                    <a
+                      class="consent-inline-link"
+                      href="{% url 'auth:personal_data_consent' %}?lang={{ ui_language|urlencode }}"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      {% if ui_language == "en" %}
+                        the processing of my personal data
+                      {% else %}
+                        обработку моих персональных данных
+                      {% endif %}
+                    </a>
+
+                    {% if field.field.required %}
+                      <span class="required-mark" aria-hidden="true">*</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+              {% elif field.field.widget.input_type == "radio" %}
+                <fieldset class="role-fieldset">
+                  <legend>{% translate field.label %}</legend>
+                  {{ field }}
+                </fieldset>
+
+              {% else %}
+                <label for="{{ field.id_for_label }}">
+                  {% translate field.label %}
+                  {% if field.field.required %}
+                    <span class="required-mark" aria-hidden="true">*</span>
+                  {% endif %}
+                </label>
+
+                              {% if field.field.widget.input_type == "password" %}
+                  <div class="password-control">
+                    {{ field }}
+
+                    <button
+                      class="password-toggle"
+                      type="button"
+                      hidden
+                      aria-controls="{{ field.id_for_label }}"
+                      aria-label="{% if ui_language == 'en' %}Show password{% else %}Показать пароль{% endif %}"
+                      data-show-label="{% if ui_language == 'en' %}Show password{% else %}Показать пароль{% endif %}"
+                      data-hide-label="{% if ui_language == 'en' %}Hide password{% else %}Скрыть пароль{% endif %}"
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                        <path
+                          class="password-eye-slash"
+                          d="M4 4 20 20"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                {% else %}
+                  {{ field }}
+                {% endif %}
+              {% endif %}
+
+              {% if field.help_text %}
+                <div
+                  class="field-help"
+                  id="{{ field.auto_id }}_helptext"
+                >
+                  {% translate field.help_text %}
+                </div>
+              {% endif %}
+            </div>
+
+            {% if field.errors %}
+              <div
+                class="error-bubble"
+                id="{{ field.auto_id }}_error"
+                role="alert"
+              >
+                <ul class="errorlist">
+                  {% for error in field.errors %}
+                    <li>{% translate error %}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
       {% endfor %}
-      <button type="submit">{{ button|default:"Отправить" }}</button>
+
+      <button
+        class="primary-button"
+        type="submit"
+        data-loading-label="{% if ui_language == 'en' %}Sending…{% else %}Отправляем…{% endif %}"
+      >
+        {% translate button|default:"Отправить" %}
+      </button>
     </form>
   {% endif %}
-  <hr>
-  <p>
-    <a href="{% url 'auth:login' %}">Вход</a> ·
-    <a href="{% url 'auth:register_student' %}">Регистрация по коду</a> ·
-    <a href="{% url 'auth:register_staff' %}">Регистрация куратора/buddy</a> ·
-    <a href="{% url 'auth:reset_request' %}">Забыли пароль</a>
-  </p>
-</body>
-</html>
+
+  {% if request.resolver_match.url_name == "verify_email" %}
+    <form
+      method="post"
+      action="{% url 'auth:resend_code' %}"
+      class="resend-form"
+    >
+      {% csrf_token %}
+
+      <button
+        class="secondary-button"
+        type="submit"
+        data-resend-wait="{{ resend_wait }}"
+        data-ready-label="{% translate 'Отправить код ещё раз' %}"
+        data-sending-label="{% translate 'Отправляем…' %}"
+        data-seconds-label="{% translate 'сек.' %}"
+        {% if resend_wait > 0 %}disabled{% endif %}
+      >
+        <span data-resend-label>
+          {% translate "Отправить код ещё раз" %}
+        </span>
+
+        <span data-resend-counter>
+          {% if resend_wait > 0 %}
+            ({{ resend_wait }} {% translate "сек." %})
+          {% endif %}
+        </span>
+      </button>
+
+      <noscript>
+        <p class="field-help">
+          {% translate "Обновите страницу, когда время ожидания закончится." %}
+        </p>
+      </noscript>
+    </form>
+
+    <script
+      src="{% static 'accounts/js/auth-codes.js' %}?v=1"
+      defer
+    ></script>
+  {% endif %}
+
+  {% if user.is_authenticated %}
+    <div class="auth-navigation">
+      <form method="post" action="{% url 'auth:logout' %}">
+        {% csrf_token %}
+        <button class="secondary-button" type="submit">
+          {% if ui_language == "en" %}
+            Log out
+          {% else %}
+            Выйти
+          {% endif %}
+        </button>
+      </form>
+    </div>
+  {% endif %}
+
+  <nav class="auth-navigation" aria-label="{% translate 'Навигация' %}">
+    {% if request.resolver_match.url_name == "register_staff" or request.resolver_match.url_name == "register_student" %}
+      <a
+        class="secondary-button"
+        href="{% url 'auth:choose_role' mode='register' %}?lang={{ ui_language|urlencode }}"
+      >
+        {% translate "Назад" %}
+      </a>
+
+    {% elif request.resolver_match.url_name == "login" %}
+      <a
+        href="{% url 'auth:reset_request' %}?lang={{ ui_language|urlencode }}"
+      >
+        {% translate "Я не помню пароль" %}
+      </a>
+
+      <a
+        class="secondary-button"
+        href="{% url 'auth:choose_role' mode='login' %}?lang={{ ui_language|urlencode }}"
+      >
+        {% translate "Назад" %}
+      </a>
+
+      {% elif request.resolver_match.url_name == "reset_verify" or request.resolver_match.url_name == "reset_confirm" %}
+      <a
+        class="secondary-button"
+        href="{% url 'auth:reset_request' %}?lang={{ ui_language|urlencode }}"
+      >
+        {% translate "Запросить новый код" %}
+      </a>
+
+    {% else %}
+      <a
+        class="secondary-button"
+        href="{% url 'welcome' %}?lang={{ ui_language|urlencode }}"
+      >
+        {% translate "На главную" %}
+      </a>
+    {% endif %}
+  </nav>
+</section>
+
+<script
+  src="{% static 'accounts/js/auth-passwords.js' %}?v=1"
+  defer
+></script>
+
+<script
+  src="{% static 'accounts/js/auth-submit.js' %}?v=1"
+  defer
+></script>
+{% endblock %}

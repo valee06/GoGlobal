@@ -1,7 +1,69 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>Заявка отправлена</title></head>
-<body>
-  <h1>Регистрация ожидает проверки командой проекта</h1>
-</body>
-</html>
+{% extends "auth/base.html" %}
+
+{% block title %}
+  {% if pending_english %}
+    Awaiting approval
+  {% else %}
+    Ожидание одобрения
+  {% endif %}
+  — GoGlobal
+{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="pending-heading">
+  <h1 id="pending-heading" class="auth-heading">
+    {% if pending_english %}
+      Awaiting approval
+    {% else %}
+      Ожидание одобрения
+    {% endif %}
+  </h1>
+
+  <p class="auth-message">
+    {% if pending_english %}
+      Your email has been verified.
+      Your registration is awaiting approval by the project team.
+    {% else %}
+      Ваша электронная почта подтверждена.
+      Заявка на регистрацию ожидает одобрения команды проекта.
+    {% endif %}
+  </p>
+
+  <p class="auth-message">
+    {% if pending_english %}
+      You will be able to access GoGlobal after your account is approved.
+      Use the button below to check your application status.
+    {% else %}
+      Доступ к GoGlobal появится после одобрения аккаунта.
+      Проверить статус заявки можно кнопкой ниже.
+    {% endif %}
+  </p>
+
+  <nav
+    class="auth-navigation"
+    aria-label="{% if pending_english %}Navigation{% else %}Навигация{% endif %}"
+  >
+    <a
+      class="secondary-button"
+      href="{% url 'auth:pending' %}"
+    >
+      {% if pending_english %}
+        Check status
+      {% else %}
+        Проверить статус
+      {% endif %}
+    </a>
+
+    <a
+      class="secondary-button"
+      href="{% url 'welcome' %}?lang={{ ui_language|urlencode }}"
+    >
+      {% if pending_english %}
+        Home
+      {% else %}
+        На главную
+      {% endif %}
+    </a>
+  </nav>
+</section>
+{% endblock %}
