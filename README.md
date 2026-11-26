@@ -1,48 +1,61 @@
 # GoGlobal
 
-## Требования
+Сервис сопровождения академического обмена. В системе есть три роли: студент-обменник, study-buddy и куратор.
 
-Для локального запуска необходимы:
-- Docker Desktop
-- Git
+## Технологии
 
-Для локального запуска Django вне Docker требуется Python 3.12.x.
+- Python 3.12
+- Django 6.0
+- PostgreSQL 17
+- Django templates и htmx
+- Docker Compose для локального запуска
 
-## Первоначальная настройка
+## Роли пользователей
 
-1. Склонировать репозиторий и перейти в папку проекта.
+- Вход выполняется по электронной почте.
+- Поддерживаются роли `student`, `buddy` и `curator`.
+- Для buddy и куратора доступ открывается после ручного одобрения.
+- У каждой роли есть свой профиль.
 
-2. Создать файл с локальными настройками:
+## Локальный запуск через Docker Compose
 
-```bash
-cp .env.example .env
-```
+Для запуска понадобятся Git и Docker Desktop.
 
-3. Собрать образы и запустить приложение с базой данных:
+1. Склонируйте репозиторий и перейдите в папку проекта.
+2. Создайте локальный файл настроек:
 
-```bash
-docker compose up --build -d
-```
+   ```bash
+   cp .env.example .env
+   ```
 
-4. Выполнить миграции базы данных:
+3. Откройте `.env` и задайте `DJANGO_SECRET_KEY` и `POSTGRES_PASSWORD`. Не отправляйте этот файл в Git и не публикуйте секреты.
+4. Соберите образы и запустите приложение с базой данных:
 
-```bash
-docker compose exec web python manage.py migrate
-```
+   ```bash
+   docker compose up --build -d
+   ```
 
-5. Открыть приложение в браузере:
+5. Примените миграции:
 
-http://localhost:8000
+   ```bash
+   docker compose exec web python manage.py migrate
+   ```
 
-## Проверка состояния
+6. При необходимости создайте администратора:
 
-Проверить состояние контейнеров:
+   ```bash
+   docker compose exec web python manage.py createsuperuser
+   ```
+
+7. Откройте приложение в браузере: <http://localhost:8000>
+
+## Проверка приложения
+
+Посмотреть состояние контейнеров:
 
 ```bash
 docker compose ps
 ```
-
-Контейнер базы данных должен иметь статус `healthy`, а контейнер приложения — `Up`.
 
 Проверить конфигурацию Django:
 
@@ -50,43 +63,69 @@ docker compose ps
 docker compose exec web python manage.py check
 ```
 
+Проверить, что миграции соответствуют моделям:
+
+```bash
+docker compose exec web python manage.py makemigrations --check --dry-run
+```
+
+Запустить тесты:
+
+```bash
+docker compose exec web python manage.py test
+```
+
 ## Ручной запуск проверок CI
 
-Если GitHub Actions недоступен или необходимо локально проверить изменения, можно выполнить основные проверки вручную.
+Если GitHub Actions недоступен, основные проверки можно выполнить вручную:
 
-1. Убедиться, что база данных запущена:
+1. Запустите базу данных:
 
-```bash
-docker compose up -d db
-```
+   ```bash
+   docker compose up -d db
+   ```
 
-2. Проверить конфигурацию Django:
+2. Проверьте конфигурацию Django:
 
-```bash
-docker compose run --rm web python manage.py check
-```
+   ```bash
+   docker compose run --rm web python manage.py check
+   ```
 
-3. Проверить согласованность миграций:
+3. Проверьте миграции:
 
-```bash
-docker compose run --rm web python manage.py makemigrations --check --dry-run
-```
+   ```bash
+   docker compose run --rm web python manage.py makemigrations --check --dry-run
+   ```
 
-4. Запустить тесты:
+4. Запустите тесты:
 
-```bash
-docker compose run --rm web python manage.py test
-```
+   ```bash
+   docker compose run --rm web python manage.py test
+   ```
 
-Команды выполняются в контейнере приложения и используют зависимости, установленные при сборке Docker-образа.
-
-При необходимости пересобрать образ после изменения зависимостей:
+После изменения зависимостей пересоберите образ приложения:
 
 ```bash
 docker compose build web
 ```
 
-## Полезные команды
+## Журнал событий
+
+Технические сообщения приложения содержат идентификатор события. Секреты в сообщениях маскируются. Не добавляйте в журнал пароли, коды подтверждения и другие личные данные.
+
+Команда ниже только показывает, сколько старых записей журнала можно удалить:
+
+```bash
+docker compose exec web python manage.py cleanup_audit_events
+```
+
+Чтобы выполнить удаление, добавьте флаг `--apply`:
+
+```bash
+docker compose exec web python manage.py cleanup_audit_events --apply
+```
+
+## Полезные команды Docker Compose
 
 Запустить контейнеры:
 
@@ -117,3 +156,35 @@ docker compose logs -f db
 ```bash
 docker compose restart web
 ```
+
+## Локальный запуск Django без Docker
+
+Для запуска вне Docker требуется Python 3.12 и доступная PostgreSQL.
+
+1. Создайте и активируйте виртуальное окружение:
+
+   ```bash
+   python3.12 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. Установите зависимости:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Создайте `.env` из примера и заполните нужные настройки:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+4. Примените миграции и запустите сервер:
+
+   ```bash
+   python manage.py migrate
+   python manage.py runserver
+   ```
+
+5. Откройте <http://127.0.0.1:8000>.

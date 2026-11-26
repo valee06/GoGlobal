@@ -226,6 +226,6 @@ __marimo__/
 .idea/
 .vscode/
 
-# Django
+# Django generated files
 staticfiles/
 media/

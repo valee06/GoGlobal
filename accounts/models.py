@@ -56,6 +56,13 @@ class StudentProfile(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="student_profile"
     )
+    curator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="students",
+        verbose_name="закреплённый куратор",
+    )
 
 
 class BuddyProfile(models.Model):
@@ -123,10 +130,13 @@ class OneTimeCode(models.Model):
         )
 
     def is_usable(self):
-        return (self.used_at is None
-                and timezone.now() < self.expires_at
-                and self.attempts < settings.CODE_MAX_ATTEMPTS)
-    
+        return (
+            self.used_at is None
+            and timezone.now() < self.expires_at
+            and self.attempts < settings.CODE_MAX_ATTEMPTS
+        )
+
+
 class AuditEvent(models.Model):
     """Служебная запись о важном действии или отказе."""
 
@@ -140,10 +150,7 @@ class AuditEvent(models.Model):
         default=uuid.uuid4,
         editable=False,
     )
-    occurred_at = models.DateTimeField(
-        default=timezone.now,
-        db_index=True,
-    )
+    occurred_at = models.DateTimeField(default=timezone.now, db_index=True)
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
