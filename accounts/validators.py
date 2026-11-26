@@ -1,31 +1,56 @@
 import re
 
-from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext as _
 
 
 class PasswordPolicyValidator:
-    """>=8 символов, только латиница/цифры/спецзнаки,
-    минимум 1 цифра и 1 спецзнак из согласованного набора."""
-
     def validate(self, password, user=None):
-        policy = settings.PASSWORD_POLICY
-        special = policy["special_chars"]
+        special = settings.PASSWORD_POLICY["special_chars"]
         errors = []
 
-        if len(password) < policy["min_length"]:
-            errors.append(f"Пароль должен быть не короче {policy['min_length']} символов.")
-        if re.search(r"[^A-Za-z0-9" + re.escape(special) + "]", password):
-            errors.append("Разрешены только латинские буквы, цифры и спецзнаки " + special)
-        if policy["require_digit"] and not re.search(r"\d", password):
-            errors.append("Добавьте хотя бы одну цифру.")
-        if policy["require_special"] and not re.search("[" + re.escape(special) + "]", password):
-            errors.append("Добавьте хотя бы один спецзнак: " + special)
+        if len(re.findall(r"[A-Za-z]", password)) < 8:
+            errors.append(
+                _("Добавьте не менее 8 латинских букв.")
+            )
+
+        if re.search(
+            r"[^A-Za-z0-9" + re.escape(special) + r"]",
+            password,
+        ):
+            errors.append(
+                _(
+                    "Разрешены только латинские буквы, цифры "
+                    "и спецзнаки %(special)s."
+                ) % {"special": special}
+            )
+
+        if not re.search(r"[0-9]", password):
+            errors.append(
+                _("Добавьте хотя бы одну цифру.")
+            )
+
+        if not re.search(
+            r"[" + re.escape(special) + r"]",
+            password,
+        ):
+            errors.append(
+                _("Добавьте хотя бы один спецзнак: %(special)s.")
+                % {"special": special}
+            )
 
         if errors:
             raise ValidationError(errors)
 
     def get_help_text(self):
-        p = settings.PASSWORD_POLICY
-        return (f"Минимум {p['min_length']} символов: латинские буквы, "
-                f"хотя бы одна цифра и спецзнак из {p['special_chars']}.")
+        return (
+            _(
+                "Не менее 8 латинских букв, хотя бы одна цифра "
+                "и один спецзнак из %(special)s. "
+                "Кириллица запрещена."
+            )
+            % {
+                "special": settings.PASSWORD_POLICY["special_chars"],
+            }
+        )

@@ -1,0 +1,77 @@
+{% extends "auth/base.html" %}
+
+{% block title %}{{ heading }} — GoGlobal{% endblock %}
+
+{% block content %}
+  <nav class="language-switch" aria-label="Language / Язык">
+    <a
+      href="?lang=ru"
+      lang="ru"
+      {% if not english %}aria-current="true"{% endif %}
+    >
+      RU
+    </a>
+
+    <a
+      href="?lang=en"
+      lang="en"
+      {% if english %}aria-current="true"{% endif %}
+    >
+      EN
+    </a>
+  </nav>
+
+  {% if mode == "welcome" %}
+    <section class="welcome-screen" aria-labelledby="welcome-title">
+      <h1 id="welcome-title" class="welcome-title">
+        GoGlobal
+      </h1>
+
+      <nav class="welcome-actions" aria-label="{{ heading }}">
+        <a href="{{ login_url }}">
+          {% if english %}Log in{% else %}Войти{% endif %}
+        </a>
+
+        <a href="{{ register_url }}">
+          {% if english %}
+            Sign up
+          {% else %}
+            Зарегистрироваться
+          {% endif %}
+        </a>
+      </nav>
+    </section>
+
+  {% else %}
+    <section class="auth-card role-card" aria-labelledby="role-title">
+      <h1 id="role-title" class="role-title">
+        {{ heading }}
+      </h1>
+
+      <nav class="role-options" aria-label="{{ heading }}">
+        {% for role in roles %}
+          <a
+            class="role-option role-option--{{ role.name }}"
+            href="{{ role.url }}"
+          >
+            <span class="role-label">{{ role.label }}</span>
+
+            <svg
+              class="role-icon"
+              viewBox="0 0 80 90"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="40" cy="22" r="15"></circle>
+              <path d="M5 85 C5 40 75 40 75 85 Z"></path>
+            </svg>
+          </a>
+        {% endfor %}
+      </nav>
+
+      <a class="back-link" href="{{ back_url }}">
+        {% if english %}Back{% else %}Назад{% endif %}
+      </a>
+    </section>
+  {% endif %}
+{% endblock %}

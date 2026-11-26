@@ -1,0 +1,190 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Регистрация куратора"
+msgstr "Curator registration"
+
+msgid "Регистрация buddy"
+msgstr "Buddy registration"
+
+msgid "Регистрация по коду куратора"
+msgstr "Student registration"
+
+msgid "Имя и фамилия"
+msgstr "Full name"
+
+msgid "Электронная почта"
+msgstr "Email"
+
+msgid "Пароль"
+msgstr "Password"
+
+msgid "Код куратора"
+msgstr "Curator invitation code"
+
+msgid "Согласие на обработку персональных данных"
+msgstr "I consent to the processing of my personal data"
+
+msgid "обязательное поле"
+msgstr "required field"
+
+msgid "Зарегистрироваться"
+msgstr "Sign up"
+
+msgid "Отправить"
+msgstr "Submit"
+
+msgid "Назад"
+msgstr "Back"
+
+msgid "На главную"
+msgstr "Home"
+
+msgid "Навигация"
+msgstr "Navigation"
+
+msgid "Вход"
+msgstr "Log in"
+
+msgid "Войти"
+msgstr "Log in"
+
+msgid "Я не помню пароль"
+msgstr "Forgot password?"
+
+msgid "Пользователь с таким email уже зарегистрирован"
+msgstr "An account with this email already exists"
+
+msgid "Недопустимая роль"
+msgstr "Invalid role"
+
+msgid "Роль не соответствует выбранной форме регистрации"
+msgstr "The role does not match the selected registration form"
+
+msgid "Не удалось войти. Проверьте данные для входа"
+msgstr "Unable to log in. Please check your credentials"
+
+msgid "Регистрация ожидает проверки командой проекта"
+msgstr "Your registration is awaiting approval by the project team"
+
+msgid "Подтвердите электронную почту — код уже отправлен"
+msgstr "Please verify your email using the code that was sent"
+
+msgid "Код из письма"
+msgstr "Email code"
+
+msgid "Код — 6 цифр из письма"
+msgstr "Enter the 6-digit code from the email"
+
+msgid "Код неверный или больше не действует"
+msgstr "The code is incorrect or no longer valid"
+
+msgid "Подтвердить"
+msgstr "Verify"
+
+msgid "Восстановление пароля"
+msgstr "Password recovery"
+
+msgid "Отправить код"
+msgstr "Send code"
+
+msgid "Проверьте почту"
+msgstr "Check your email"
+
+msgid "Если адрес зарегистрирован, мы отправим инструкцию по восстановлению"
+msgstr "If this email is registered, we will send password recovery instructions"
+
+msgid "Новый пароль"
+msgstr "New password"
+
+msgid "Повторите новый пароль"
+msgstr "Confirm new password"
+
+msgid "Пароли не совпадают"
+msgstr "Passwords do not match"
+
+msgid "Сохранить"
+msgstr "Save"
+
+msgid "Не удалось отправить письмо"
+msgstr "Unable to send the email"
+
+msgid "Регистрация сохранена. Попробуйте запросить код позже."
+msgstr "Your registration has been saved. Please try requesting a code later."
+
+msgid "Попробуйте ещё раз позже. Прежний код продолжает действовать."
+msgstr "Please try again later. The previous code is still valid."
+
+msgid "Добавьте не менее 8 латинских букв."
+msgstr "Include at least 8 Latin letters."
+
+#, python-format
+msgid "Разрешены только латинские буквы, цифры и спецзнаки %(special)s."
+msgstr "Only Latin letters, digits and these special characters are allowed: %(special)s."
+
+msgid "Добавьте хотя бы одну цифру."
+msgstr "Include at least one digit."
+
+#, python-format
+msgid "Добавьте хотя бы один спецзнак: %(special)s."
+msgstr "Include at least one special character: %(special)s."
+
+#, python-format
+msgid "Не менее 8 латинских букв, хотя бы одна цифра и один спецзнак из %(special)s. Кириллица запрещена."
+msgstr "At least 8 Latin letters, one digit and one special character from %(special)s. Cyrillic characters are not allowed."
+
+msgid "Подтверждение электронной почты"
+msgstr "Verify your email"
+
+#, python-format
+msgid "Введите код для адреса %(email)s. Проверьте входящие и папку «Спам»."
+msgstr "Enter the code for %(email)s. Check your inbox and spam folder."
+
+msgid "Отправить код ещё раз"
+msgstr "Send another code"
+
+#, python-format
+msgid "Запросите новый код через %(seconds)s сек."
+msgstr "Request a new code in %(seconds)s seconds."
+
+msgid "Не удалось отправить письмо. Попробуйте позже."
+msgstr "Unable to send the email. Please try again later."
+
+msgid "Новый код отправлен. Предыдущий больше не действует."
+msgstr "A new code has been sent. The previous code is no longer valid."
+
+msgid "Отправляем…"
+msgstr "Sending…"
+
+msgid "сек."
+msgstr "s"
+
+msgid "Обновите страницу, когда время ожидания закончится."
+msgstr "Refresh this page once the waiting period has ended."
+
+msgid "Код восстановления"
+msgstr "Recovery code"
+
+msgid "Установить новый пароль"
+msgstr "Set a new password"
+
+msgid "Восстановление недоступно. Запросите новый код."
+msgstr "Password recovery is unavailable. Request a new code."
+
+#, python-format
+msgid "Введите новый пароль для %(email)s."
+msgstr "Enter a new password for %(email)s."
+
+msgid "Обновить пароль"
+msgstr "Update password"
+
+msgid "Пароль обновлён. Войдите с новым паролем."
+msgstr "Your password has been updated. Log in with your new password."
+
+msgid "Запросить новый код"
+msgstr "Request a new code"
