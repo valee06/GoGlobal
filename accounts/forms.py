@@ -41,12 +41,14 @@ class StaffRegistrationForm(forms.Form):
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
-
-        if User.objects.filter(email=email).exists():
-            raise forms.ValidationError(
-                "Пользователь с таким email уже зарегистрирован"
-            )
-
+        existing = User.objects.filter(email=email).first()
+        if existing:
+            if existing.email_verified:
+                raise forms.ValidationError(
+                    "Пользователь с таким email уже зарегистрирован"
+                )
+            # Почта не подтверждена — старый аккаунт заменим
+            self._replaces_user = existing
         return email
 
     def clean_password(self):

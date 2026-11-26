@@ -15,6 +15,7 @@ from .forms import (EmailCodeForm, LoginForm, ResetConfirmForm,
 from .models import OneTimeCode, User, Invitation, StudentProfile
 from .services import (kill_user_sessions, login_locked,
                        register_login_failure, reset_login_failures)
+from .decorators import curator_required
 
 from django.contrib import messages
 from .codes import (
@@ -66,6 +67,9 @@ def register_staff(request):
         )
 
         if form.is_valid():
+            old = getattr(form, "_replaces_user", None)
+            if old:
+                old.delete()  # стираем неподтверждённый аккаунт с этой почтой
             user = form.save()
 
             try:
@@ -117,7 +121,9 @@ def register_student(request):
                 consent_version=settings.CONSENT_VERSION,
                 consented_at=timezone.now(),
             )
-            StudentProfile.objects.get_or_create(user=user)
+            profile, _ = StudentProfile.objects.get_or_create(user=user)
+            profile.curator = form.invitation.curator
+            profile.save()
             try:
                 _start_verification(request, user)
             except MailSendError:
@@ -181,17 +187,6 @@ def verify_email(request):
             OneTimeCode.Purpose.EMAIL_VERIFY,
         ),
     })
-
-
-def curator_required(view):
-    """Только одобренный куратор (остальных — на home)."""
-    @login_required
-    def wrapper(request, *args, **kwargs):
-        u = request.user
-        if u.role != User.Role.CURATOR or not u.is_approved:
-            return redirect("home")
-        return view(request, *args, **kwargs)
-    return wrapper
 
 
 @require_POST

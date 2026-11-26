@@ -56,6 +56,13 @@ class StudentProfile(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="student_profile"
     )
+    curator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="students",
+        verbose_name="закреплённый куратор",
+    )
 
 
 class BuddyProfile(models.Model):
