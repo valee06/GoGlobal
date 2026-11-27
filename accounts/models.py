@@ -1,10 +1,10 @@
-from django.contrib.auth.models import AbstractUser
-from django.db import models
-from django.contrib.auth.models import AbstractUser, BaseUserManager
 import secrets
-from django.conf import settings
-from django.utils import timezone
+import uuid
 
+from django.conf import settings
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.db import models
+from django.utils import timezone
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra):
@@ -120,7 +120,65 @@ class OneTimeCode(models.Model):
             expires_at=timezone.now() + timezone.timedelta(minutes=ttl_minutes),
         )
 
+    @classmethod
+    def generate_candidate(cls, user, purpose, ttl_minutes):
+        """Создать новый код, пока не отключая прежние коды."""
+        return cls.objects.create(
+            user=user,
+            purpose=purpose,
+            code=str(secrets.randbelow(900000) + 100000),
+            expires_at=timezone.now() + timezone.timedelta(minutes=ttl_minutes),
+        )
+
     def is_usable(self):
-        return (self.used_at is None
-                and timezone.now() < self.expires_at
-                and self.attempts < settings.CODE_MAX_ATTEMPTS)
+        return (
+            self.used_at is None
+            and timezone.now() < self.expires_at
+            and self.attempts < settings.CODE_MAX_ATTEMPTS
+        )
+
+
+class AuditEvent(models.Model):
+    """Служебная запись о важном действии или отказе."""
+
+    class Result(models.TextChoices):
+        SUCCESS = "success", "Успешно"
+        DENIED = "denied", "Отказано"
+        ERROR = "error", "Ошибка"
+
+    event_id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    occurred_at = models.DateTimeField(default=timezone.now, db_index=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    operation = models.CharField(max_length=64, db_index=True)
+    object_type = models.CharField(max_length=64)
+    object_id = models.CharField(max_length=64, blank=True, default="")
+    result = models.CharField(
+        max_length=12,
+        choices=Result.choices,
+        db_index=True,
+    )
+    reason_code = models.CharField(max_length=64, blank=True, default="")
+    request_id = models.UUIDField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["-occurred_at"]
+        indexes = [
+            models.Index(
+                fields=["occurred_at", "operation"],
+                name="audit_time_op_idx",
+            ),
+            models.Index(
+                fields=["occurred_at", "result"],
+                name="audit_time_result_idx",
+            ),
+        ]

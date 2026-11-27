@@ -6,6 +6,10 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
 
+from unittest.mock import patch
+
+from .emails import MailResult, MailSendError
+
 from .models import User
 
 REGISTER_URL = reverse("auth:register_staff")
@@ -114,6 +118,26 @@ class ApproveUserCommandTests(TestCase):
         self.assertFalse(self.user.is_approved)
         self.assertFalse(self.user.is_active)
 
+    def test_deactivation_invalidates_existing_session(self):
+        self.user.email_verified = True
+        self.user.save()
+
+        self.call("staff@example.com", "--by", "Иля", "--approve")
+
+        logged_in = self.client.login(
+            email="staff@example.com",
+            password="Strong1!pass",
+        )
+        self.assertTrue(logged_in)
+
+        self.call("staff@example.com", "--by", "Иля", "--deactivate")
+
+        response = self.client.get("/dashboard/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/auth/login", response.url)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
     def test_student_cannot_be_manually_approved(self):
         """Студент не проходит ручное одобрение (C10)."""
         student = User.objects.create_user(
@@ -136,16 +160,30 @@ from django.utils import timezone
 from .models import Invitation, OneTimeCode, User
 
 
-def make_curator():
+def make_curator(email="curator@example.com"):
     """Одобренный куратор — владелец кодов приглашений."""
     curator = User.objects.create_user(
-        email="curator@example.com", password="Password1!",
-        role=User.Role.CURATOR, is_approved=True,
+        email=email,
+        password="Password1!",
+        role=User.Role.CURATOR,
+        is_approved=True,
     )
     curator.email_verified = True
     curator.save()
     return curator
 
+def make_buddy(email="buddy@example.invalid"):
+    """Синтетический одобренный Study-buddy."""
+    buddy = User.objects.create_user(
+        email=email,
+        password="Password1!",
+        role=User.Role.BUDDY,
+        is_approved=True,
+        full_name="Тестовый Study-buddy",
+    )
+    buddy.email_verified = True
+    buddy.save()
+    return buddy
 
 def make_invitation(curator, code="TESTCODE1"):
     return Invitation.objects.create(
@@ -294,6 +332,57 @@ class PasswordResetTests(TestCase):
         response = self.client.get("/dashboard/")
         self.assertIn("/auth/login", response.url)
 
+    def test_reset_code_of_another_user_cannot_reset_password(self):
+        target_user = make_student("target@example.invalid")
+        other_user = make_student("other@example.invalid")
+
+        # target запрашивает восстановление — в сессии его email
+        self.client.post("/auth/password/reset/request/",
+                         {"email": target_user.email})
+
+        # подсовываем код, выпущенный для ДРУГОГО пользователя
+        foreign_code = OneTimeCode.objects.create(
+            user=other_user,
+            purpose=OneTimeCode.Purpose.PASSWORD_RESET,
+            code="654321",
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+
+        self.client.post("/auth/password/reset/verify/",
+                         {"code": foreign_code.code})
+
+        # «пропуск» на смену пароля не выдан
+        self.assertNotIn("password_reset_grant", self.client.session)
+
+        target_user.refresh_from_db()
+        other_user.refresh_from_db()
+
+        self.assertTrue(target_user.check_password("Password1!"))
+        self.assertTrue(other_user.check_password("Password1!"))
+        self.assertIsNone(foreign_code.used_at)
+
+    def test_expired_reset_code_does_not_change_password(self):
+        user = make_student("expired@example.invalid")
+
+        self.client.post("/auth/password/reset/request/",
+                         {"email": user.email})
+
+        expired_code = OneTimeCode.objects.get(
+            user=user,
+            purpose=OneTimeCode.Purpose.PASSWORD_RESET,
+        )
+        expired_code.expires_at = timezone.now() - timedelta(seconds=1)
+        expired_code.save(update_fields=["expires_at"])
+
+        self.client.post("/auth/password/reset/verify/",
+                         {"code": expired_code.code})
+
+        self.assertNotIn("password_reset_grant", self.client.session)
+
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("Password1!"))
+        self.assertFalse(expired_code.is_usable())
+
 
 class StudentProfileTests(TestCase):
 
@@ -335,3 +424,75 @@ class StudentProfileTests(TestCase):
             "consent_personal_data": "on",
         })
         self.assertContains(response, "уже зарегистрирован")
+
+class ResendCodeTests(TestCase):
+    """Повторная отправка кода подтверждения (D03-2)."""
+
+    def setUp(self):
+        self.user = make_student("resend@example.com")
+        self.user.email_verified = False
+        self.user.save(update_fields=["email_verified"])
+
+        # Старый действующий код, «отправленный» достаточно давно,
+        # чтобы не сработало ограничение частоты отправки.
+        self.old_code = OneTimeCode.objects.create(
+            user=self.user,
+            purpose=OneTimeCode.Purpose.EMAIL_VERIFY,
+            code="123456",
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        OneTimeCode.objects.filter(pk=self.old_code.pk).update(
+            created_at=timezone.now() - timedelta(seconds=61),
+        )
+
+        session = self.client.session
+        session["pending_verify_user_id"] = self.user.pk
+        session.save()
+
+    def test_resend_sends_new_code(self):
+        response = self.client.post("/auth/email/resend/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/auth/email/verify", response.url)
+
+        latest = OneTimeCode.objects.filter(
+            user=self.user,
+            purpose=OneTimeCode.Purpose.EMAIL_VERIFY,
+        ).order_by("-created_at", "-pk").first()
+        self.assertNotEqual(latest.pk, self.old_code.pk)
+
+    def test_resend_rate_limited(self):
+        # код только что отправлен — повтор раньше чем через 60 сек запрещён
+        OneTimeCode.objects.filter(pk=self.old_code.pk).update(
+            created_at=timezone.now(),
+        )
+
+        response = self.client.post("/auth/email/resend/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            OneTimeCode.objects.filter(
+                user=self.user,
+                purpose=OneTimeCode.Purpose.EMAIL_VERIFY,
+            ).count(),
+            1,  # новый код не создан
+        )
+
+    @patch(
+        "accounts.codes.send_code_email_or_raise",
+        side_effect=MailSendError(MailResult.REJECTED),
+    )
+    def test_mail_failure_keeps_old_code(self, send_mock):
+        response = self.client.post("/auth/email/resend/")
+
+        self.assertEqual(response.status_code, 302)
+        # транзакция откатилась: новый код не сохранился, старый жив
+        self.assertEqual(
+            OneTimeCode.objects.filter(
+                user=self.user,
+                purpose=OneTimeCode.Purpose.EMAIL_VERIFY,
+            ).count(),
+            1,
+        )
+        self.old_code.refresh_from_db()
+        self.assertIsNone(self.old_code.used_at)
