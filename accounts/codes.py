@@ -6,7 +6,7 @@ from secrets import compare_digest
 from django.db import transaction
 from django.utils import timezone
 
-from .emails import send_code_email
+from .emails import send_code_email_or_raise
 from .models import OneTimeCode, User
 
 
@@ -95,7 +95,7 @@ def send_code_limited(user, purpose, ttl_minutes):
 
         code.save(update_fields=["code"])
 
-        send_code_email(
+        send_code_email_or_raise(
             locked_user.email,
             code.code,
             purpose,

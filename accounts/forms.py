@@ -102,7 +102,7 @@ class StudentRegistrationForm(forms.Form):
         if not invitation.is_valid():
             raise forms.ValidationError(
                 "Код недействителен или больше не действует. Уточните код у куратора")
-        self.invitation = invitation  
+        self.invitation = invitation
         return code
 
     def clean_email(self):
@@ -113,7 +113,7 @@ class StudentRegistrationForm(forms.Form):
                 raise forms.ValidationError(
                     "Пользователь с таким email уже зарегистрирован"
                 )
-            # Почта не подтверждена — старый аккаунт заменим 
+            # Почта не подтверждена — старый аккаунт заменим
             self._replaces_user = existing
         return email
 
