@@ -8,14 +8,14 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.utils.translation import gettext as _
 
-from .emails import MailSendError, send_code_email
+from .emails import MailSendError
+from .audit import record_domain_event
 from .forms import (EmailCodeForm, LoginForm, ResetConfirmForm,
                     ResetRequestForm, StaffRegistrationForm,
                     StudentProfileForm, StudentRegistrationForm)
 from .models import OneTimeCode, User, Invitation, StudentProfile
 from .services import (kill_user_sessions, login_locked,
                        register_login_failure, reset_login_failures)
-from .decorators import curator_required
 
 from django.contrib import messages
 from .codes import (
@@ -23,7 +23,7 @@ from .codes import (
     check_code,
     send_code_limited,
     wait_before_resend,
-)              
+)
 
 from django.db import transaction
 
@@ -31,6 +31,7 @@ GENERIC_ERROR = "Не удалось войти. Проверьте данные
 
 
 def _start_verification(request, user):
+    """Создать код, отправить письмо, положить контекст в сессию."""
     request.session["pending_verify_user_id"] = user.pk
 
     send_code_limited(
@@ -121,9 +122,7 @@ def register_student(request):
                 consent_version=settings.CONSENT_VERSION,
                 consented_at=timezone.now(),
             )
-            profile, _ = StudentProfile.objects.get_or_create(user=user)
-            profile.curator = form.invitation.curator
-            profile.save()
+            StudentProfile.objects.get_or_create(user=user)
             try:
                 _start_verification(request, user)
             except MailSendError:
@@ -189,8 +188,20 @@ def verify_email(request):
     })
 
 
+def curator_required(view):
+    """Только одобренный куратор (остальных — на home)."""
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        u = request.user
+        if u.role != User.Role.CURATOR or not u.is_approved:
+            return redirect("home")
+        return view(request, *args, **kwargs)
+    return wrapper
+
+
 @require_POST
 def resend_code(request):
+    """Повторная отправка кода с ограничением частоты (D03-2)."""
     user_id = request.session.get("pending_verify_user_id")
 
     if not user_id:
@@ -235,40 +246,90 @@ def resend_code(request):
 
 
 def login_view(request):
-    """вход. Роль — только из БД, ошибка всегда общая."""
+    """Вход; фиксируем успехи и отказы без email и пароля."""
     if request.method == "POST":
         form = LoginForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data["email"]
+
             if login_locked(email):
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="authentication",
+                    result="denied",
+                    reason_code="login_locked",
+                    request_id=getattr(request, "event_id", None),
+                )
                 return render(request, "auth/form.html", {
                     "heading": "Слишком много попыток",
                     "message": f"Повторите через {settings.LOGIN_LOCK_MINUTES} минут "
                                f"или восстановите пароль.",
                 })
-            user = authenticate(request, username=email,
-                                password=form.cleaned_data["password"])
+
+            user = authenticate(
+                request,
+                username=email,
+                password=form.cleaned_data["password"],
+            )
+
             if user is None or not user.is_active:
+                record_domain_event(
+                    operation="auth.login",
+                    object_type="authentication",
+                    result="denied",
+                    reason_code="bad_credentials",
+                    request_id=getattr(request, "event_id", None),
+                )
                 register_login_failure(email)
-                form.add_error(None, GENERIC_ERROR)  # без раскрытия аккаунта
+                form.add_error(None, GENERIC_ERROR)
             else:
                 reset_login_failures(email)
                 if not user.email_verified:
+                    record_domain_event(
+                        operation="auth.login",
+                        object_type="user",
+                        object_id=user.pk,
+                        actor_id=user.pk,
+                        result="denied",
+                        reason_code="email_unverified",
+                        request_id=getattr(request, "event_id", None),
+                    )
                     request.session["pending_verify_user_id"] = user.pk
                     return redirect("auth:verify_email")
                 elif user.role != User.Role.STUDENT and not user.is_approved:
+                    record_domain_event(
+                        operation="auth.login",
+                        object_type="user",
+                        object_id=user.pk,
+                        actor_id=user.pk,
+                        result="denied",
+                        reason_code="approval_pending",
+                        request_id=getattr(request, "event_id", None),
+                    )
                     request.session["pending_approval_user_id"] = user.pk
                     return redirect("auth:pending")
                 else:
                     login(request, user)
+                    record_domain_event(
+                        operation="auth.login",
+                        object_type="user",
+                        object_id=user.pk,
+                        actor_id=user.pk,
+                        result="success",
+                        request_id=getattr(request, "event_id", None),
+                    )
                     nxt = request.GET.get("next", "")
                     if nxt and url_has_allowed_host_and_scheme(nxt, {request.get_host()}):
                         return redirect(nxt)
                     return redirect("home")
     else:
         form = LoginForm()
-    return render(request, "auth/form.html",
-                  {"form": form, "heading": "Вход", "button": "Войти"})
+
+    return render(
+        request,
+        "auth/form.html",
+        {"form": form, "heading": "Вход", "button": "Войти"},
+    )
 
 
 @require_POST
@@ -343,10 +404,9 @@ def reset_request(request):
                         settings.RESET_CODE_TTL_MINUTES,
                     )
                 except (MailSendError, CodeRateLimit):
-                    pass
+                    pass  # публичный ответ не меняется (C07)
 
             return redirect("auth:reset_verify")
-
     else:
         form = ResetRequestForm()
 

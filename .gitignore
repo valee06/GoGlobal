@@ -218,5 +218,13 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Django collectstatic
-/staticfiles/
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Django generated files
+staticfiles/
+media/
