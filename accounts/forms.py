@@ -7,14 +7,37 @@ from .models import Invitation, OneTimeCode, User
 
 
 class StaffRegistrationForm(forms.Form):
-    full_name = forms.CharField(max_length=150)
-    email = forms.EmailField()
-    password = forms.CharField(widget=forms.PasswordInput)
-    role = forms.ChoiceField(choices=[
-        (User.Role.CURATOR, "Куратор"),
-        (User.Role.BUDDY, "Buddy"),
-    ], widget=forms.RadioSelect)
-    consent_personal_data = forms.BooleanField()
+    full_name = forms.CharField(
+        max_length=150,
+        label="Имя и фамилия",
+    )
+    email = forms.EmailField(
+        label="Электронная почта",
+    )
+    password = forms.CharField(
+        widget=forms.PasswordInput,
+        label="Пароль",
+    )
+    role = forms.ChoiceField(
+        choices=[
+            (User.Role.CURATOR, "Куратор"),
+            (User.Role.BUDDY, "Buddy"),
+        ],
+        widget=forms.RadioSelect,
+        label="Роль",
+    )
+    consent_personal_data = forms.BooleanField(
+        label="Согласие на обработку персональных данных",
+    )
+
+    def __init__(self, *args, selected_role=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.selected_role = selected_role
+
+        if selected_role in (User.Role.CURATOR, User.Role.BUDDY):
+            self.fields["role"].widget = forms.HiddenInput()
+            self.fields["role"].initial = selected_role
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
@@ -35,15 +58,23 @@ class StaffRegistrationForm(forms.Form):
 
     def clean_role(self):
         role = self.cleaned_data["role"]
+
         if role not in (User.Role.CURATOR, User.Role.BUDDY):
             raise forms.ValidationError("Недопустимая роль")
+
+        if self.selected_role and role != self.selected_role:
+            raise forms.ValidationError(
+                "Роль не соответствует выбранной форме регистрации"
+            )
+
         return role
 
     def save(self):
         data = self.cleaned_data
+
         return User.objects.create_user(
             email=data["email"],
-            password=data["password"],   # create_user сам хэширует (PBKDF2)
+            password=data["password"],
             full_name=data["full_name"],
             role=data["role"],
             is_approved=False,
@@ -115,24 +146,37 @@ class ResetRequestForm(forms.Form):
 
 
 class ResetConfirmForm(forms.Form):
-    """новый пароль по коду из письма."""
-    email = forms.EmailField(label="Электронная почта")
-    code = forms.CharField(max_length=6, min_length=6, label="Код из письма")
-    new_password = forms.CharField(widget=forms.PasswordInput, label="Новый пароль")
-    new_password_confirm = forms.CharField(widget=forms.PasswordInput,
-                                           label="Повторите новый пароль")
+    new_password = forms.CharField(
+        widget=forms.PasswordInput,
+        label="Новый пароль",
+    )
+    new_password_confirm = forms.CharField(
+        widget=forms.PasswordInput,
+        label="Повторите новый пароль",
+    )
 
     def clean(self):
         cleaned = super().clean()
-        p1 = cleaned.get("new_password")
-        p2 = cleaned.get("new_password_confirm")
-        if p1 and p2 and p1 != p2:
-            self.add_error("new_password_confirm", "Пароли не совпадают")
-        if p1:
-            validate_password(p1)
+
+        password = cleaned.get("new_password")
+        confirmation = cleaned.get("new_password_confirm")
+
+        if password and confirmation and password != confirmation:
+            self.add_error(
+                "new_password_confirm",
+                "Пароли не совпадают",
+            )
+
+        if password:
+            try:
+                validate_password(password)
+            except forms.ValidationError as exc:
+                self.add_error("new_password", exc)
+
         return cleaned
 
 
 class StudentProfileForm(forms.Form):
     """обязательная анкета студента (пока только имя)."""
     full_name = forms.CharField(max_length=150, label="Имя и фамилия")
+

@@ -1,0 +1,309 @@
+{% extends "auth/base.html" %}
+
+{% block title %}
+  {% if ui_language == "en" %}
+    Personal data processing consent
+  {% else %}
+    Согласие на обработку персональных данных
+  {% endif %}
+  — GoGlobal
+{% endblock %}
+
+{% block content %}
+<article
+  class="auth-card consent-card"
+  aria-labelledby="consent-heading"
+>
+  {% if ui_language == "en" %}
+
+    <h1 id="consent-heading" class="auth-heading">
+      Personal data processing consent
+    </h1>
+
+    <p class="field-help">
+      Trial version dated 26 November 2026.
+    </p>
+
+    <div class="form-alert">
+      Draft for prototype review. Hosting arrangements,
+      service providers and technical data processing details
+      are still being finalised. This version is not the final
+      document for testing with real personal data.
+    </div>
+
+    <p>
+      I voluntarily consent to the processing of my personal data
+      by Екатерина Алексеевна Кузенкова
+      (Ekaterina Alekseevna Kuzenkova), the personal data controller
+      for the GoGlobal educational project, for participation
+      in prototype testing.
+    </p>
+
+    <p>
+      Contact for personal data enquiries and withdrawal of consent:
+      <a href="mailto:goglobal@yandex.ru">goglobal@yandex.ru</a>.
+    </p>
+
+    <h2>1. Purposes of processing</h2>
+
+    <p>
+      Creating and maintaining an account; providing prototype
+      features for academic exchange support; enabling interaction
+      between participants within their assigned roles;
+      sending service emails and selected notifications;
+      and evaluating the functionality and usability of the service.
+    </p>
+
+    <h2>2. Personal data</h2>
+
+    <p>
+      Depending on my role and the features I use:
+    </p>
+
+    <ul>
+      <li>
+        Name and surname, email address, telephone number
+        and other contact details I provide.
+      </li>
+      <li>
+        User role, interface language, time zone
+        and notification preferences.
+      </li>
+      <li>
+        Exchange participation details: associated universities,
+        exchange route and stage, assigned curator or buddy.
+      </li>
+      <li>
+        Personal tasks, deadlines, completion status
+        and review results.
+      </li>
+      <li>
+        For buddies: communication language, availability schedule
+        and scope of assistance.
+      </li>
+      <li>
+        Registration, email verification, account approval
+        and consent records.
+      </li>
+    </ul>
+
+    <p>
+      The technical data and logs actually collected will be specified
+      in the personal data processing policy once the service
+      configuration has been finalised.
+    </p>
+
+    <h2>3. Processing operations</h2>
+
+    <p>
+      Collection, recording, organisation, storage, updating,
+      retrieval, use, granting access to authorised participants
+      within their roles, anonymisation and deletion.
+      Processing may be automated or performed manually
+      where necessary.
+    </p>
+
+    <h2>4. Access to data</h2>
+
+    <p>
+      Access is provided to the controller and authorised project
+      team members supporting the testing, and to the curator
+      and assigned buddy within their respective permissions.
+      Personal data is not intended for public disclosure.
+    </p>
+
+    <h2>5. Processing period</h2>
+
+    <p>
+      Data is processed for the duration of testing.
+      Test accounts and related personal data will be deleted
+      no later than 30 days after testing ends, unless a legal
+      basis requires or permits further processing.
+    </p>
+
+    <p>
+      Where the service requires earlier deletion of a student's
+      direct personal data upon completion of their exchange,
+      that earlier deletion applies.
+    </p>
+
+    <h2>6. Withdrawal of consent</h2>
+
+    <p>
+      I may withdraw consent by emailing
+      <a href="mailto:goglobal@yandex.ru">goglobal@yandex.ru</a>
+      with the subject “Withdrawal of consent — GoGlobal”.
+      I should identify my account using the email address
+      used for registration.
+    </p>
+
+    <p>
+      Withdrawal may result in the loss of access to features
+      that require the relevant personal data processing.
+      Processing will cease and data will be deleted within
+      applicable legal time limits, unless another lawful
+      basis for processing applies.
+    </p>
+
+    <h2>7. Giving consent</h2>
+
+    <p>
+      I give consent by selecting the separate personal data
+      processing consent checkbox and submitting the registration
+      form. Opening this page alone does not constitute consent.
+    </p>
+
+    <p class="auth-message">
+      Close this tab to return to the registration form.
+    </p>
+
+  {% else %}
+
+    <h1 id="consent-heading" class="auth-heading">
+      Согласие на обработку персональных данных
+    </h1>
+
+    <p class="field-help">
+      Пробная версия от 26 ноября 2026 года.
+    </p>
+
+    <div class="form-alert">
+      Черновик для проверки прототипа. Условия размещения,
+      используемые сервисы и состав технических данных
+      ещё уточняются. Эта версия не является окончательным
+      документом для тестирования с реальными персональными данными.
+    </div>
+
+    <p>
+      Я добровольно даю согласие Кузенковой Екатерине Алексеевне,
+      оператору персональных данных учебного проекта GoGlobal,
+      на обработку моих персональных данных для участия
+      в тестировании прототипа.
+    </p>
+
+    <p>
+      Контакт оператора по вопросам обработки данных
+      и отзыва согласия:
+      <a href="mailto:goglobal@yandex.ru">goglobal@yandex.ru</a>.
+    </p>
+
+    <h2>1. Цели обработки</h2>
+
+    <p>
+      Создание и обслуживание учётной записи, предоставление
+      функций прототипа сопровождения академического обмена,
+      взаимодействие участников в рамках назначенных ролей,
+      отправка служебных писем и выбранных уведомлений,
+      проверка работоспособности и удобства сервиса.
+    </p>
+
+    <h2>2. Обрабатываемые данные</h2>
+
+    <p>
+      В зависимости от моей роли и используемых функций:
+    </p>
+
+    <ul>
+      <li>
+        Имя и фамилия, адрес электронной почты, контактный
+        телефон и другие указанные мной контакты.
+      </li>
+      <li>
+        Роль, язык интерфейса, часовой пояс
+        и настройки уведомлений.
+      </li>
+      <li>
+        Сведения об участии в обмене: связанные вузы,
+        маршрут и этап, назначенный куратор или buddy.
+      </li>
+      <li>
+        Персональные задачи, сроки, отметки выполнения
+        и результаты проверок.
+      </li>
+      <li>
+        Для buddy — язык общения, график
+        и границы оказываемой помощи.
+      </li>
+      <li>
+        Сведения о регистрации, подтверждении почты,
+        одобрении аккаунта и предоставлении согласия.
+      </li>
+    </ul>
+
+    <p>
+      Перечень фактически собираемых технических данных
+      и журналов будет указан в политике обработки персональных
+      данных после уточнения конфигурации сервиса.
+    </p>
+
+    <h2>3. Действия с данными</h2>
+
+    <p>
+      Сбор, запись, систематизация, хранение, уточнение,
+      извлечение, использование, предоставление доступа
+      уполномоченным участникам в пределах их ролей,
+      обезличивание и удаление. Обработка осуществляется
+      с использованием программных средств и,
+      при необходимости, вручную.
+    </p>
+
+    <h2>4. Доступ к данным</h2>
+
+    <p>
+      Доступ предоставляется оператору и уполномоченным
+      участникам команды для сопровождения тестирования,
+      а также куратору и назначенному buddy в пределах
+      предусмотренных для них прав.
+      Данные не предназначены для открытой публикации.
+    </p>
+
+    <h2>5. Срок обработки</h2>
+
+    <p>
+      Данные обрабатываются в течение тестирования.
+      Удаление тестовых аккаунтов и связанных персональных
+      данных завершается не позднее 30 дней после окончания
+      тестирования, если отсутствуют предусмотренные законом
+      основания для дальнейшей обработки.
+    </p>
+
+    <p>
+      Если функции сервиса предусматривают более раннее
+      удаление прямых персональных данных студента
+      после завершения обмена, применяется этот более ранний срок.
+    </p>
+
+    <h2>6. Отзыв согласия</h2>
+
+    <p>
+      Я могу отозвать согласие, направив обращение на
+      <a href="mailto:goglobal@yandex.ru">goglobal@yandex.ru</a>
+      с темой «Отзыв согласия GoGlobal».
+      Для поиска аккаунта следует указать email,
+      использованный при регистрации.
+    </p>
+
+    <p>
+      После отзыва доступ к функциям, для которых необходима
+      соответствующая обработка данных, может быть прекращён.
+      Обработка прекращается, а данные удаляются
+      в предусмотренные законом сроки, если отсутствуют
+      иные законные основания для обработки.
+    </p>
+
+    <h2>7. Предоставление согласия</h2>
+
+    <p>
+      Я предоставляю согласие, самостоятельно отмечая
+      отдельный чекбокс согласия на обработку персональных
+      данных и отправляя форму регистрации.
+      Само открытие этой страницы не означает предоставления согласия.
+    </p>
+
+    <p class="auth-message">
+      Закройте эту вкладку, чтобы вернуться к форме регистрации.
+    </p>
+
+  {% endif %}
+</article>
+{% endblock %}

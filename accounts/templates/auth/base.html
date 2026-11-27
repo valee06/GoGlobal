@@ -1,0 +1,49 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="{{ ui_language|default:'ru' }}">
+<head>
+  <meta charset="utf-8">
+  <link
+    rel="icon"
+    type="image/png"
+    href="{% static 'accounts/images/favicon.png' %}?v=2"
+  >
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{% block title %}GoGlobal{% endblock %}</title>
+
+  <link
+    rel="stylesheet"
+    href="{% static 'accounts/css/auth.css' %}?v=5"
+  >
+</head>
+<body class="{% if hide_header %}entry-page{% endif %}">
+  <a class="skip-link" href="#main-content">
+    {% if english %}
+      Skip to content
+    {% else %}
+      Перейти к содержимому
+    {% endif %}
+  </a>
+
+    <header class="site-header">
+        <a
+            class="brand"
+            href="{% url 'welcome' %}?lang={{ ui_language|urlencode }}"
+        >
+            <img
+                class="brand-logo"
+                src="{% static 'accounts/images/logo.png' %}"
+                alt=""
+                width="40"
+                height="40"
+            >
+            <span>GoGlobal</span>
+        </a>
+    </header>
+
+  <main id="main-content" class="auth-layout" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
