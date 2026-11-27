@@ -1,0 +1,36 @@
+{% extends "auth/base.html" %}
+
+{% block title %}Архивирование вуза — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="archive-heading">
+  <h1 id="archive-heading" class="auth-heading">
+    Архивировать вуз?
+  </h1>
+
+  <p class="auth-message">
+    Вуз <strong>{{ university.name }}</strong>
+    будет скрыт из активного списка.
+    Его запись останется в базе данных.
+  </p>
+
+  <form
+    method="post"
+    action="{% url 'exchange:university_archive' university.pk %}"
+  >
+    {% csrf_token %}
+    <button class="primary-button" type="submit">
+      Подтвердить архивирование
+    </button>
+  </form>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a
+      class="secondary-button"
+      href="{% url 'exchange:university_list' %}"
+    >
+      Отмена
+    </a>
+  </nav>
+</section>
+{% endblock %}

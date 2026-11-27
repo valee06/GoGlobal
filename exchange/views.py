@@ -11,6 +11,11 @@ from .models import (BuddyAssignment, ChecklistItem, ExchangeParticipation,
                      ExchangeRoute, University)
 from .permissions import can_edit_participation
 
+from django.db.models import Prefetch
+from .models import Stage
+
+from django.db import IntegrityError, transaction
+from django.contrib import messages
 
 def _forbidden(request, message="Это действие вам недоступно."):
     return render(request, "auth/form.html", {
@@ -22,11 +27,15 @@ def _forbidden(request, message="Это действие вам недоступ
 
 @curator_required
 def university_list(request):
-    return render(request, "exchange/list.html", {
-        "heading": "Вузы",
-        "objects": University.objects.filter(is_archived=False),
-        "create_url": "exchange:university_create",
-    })
+    universities = University.objects.filter(
+        is_archived=False,
+    ).order_by("name", "pk")
+
+    return render(
+        request,
+        "exchange/universities.html",
+        {"objects": universities},
+    )
 
 
 @curator_required
@@ -34,7 +43,13 @@ def university_create(request):
     if request.method == "POST":
         form = UniversityForm(request.POST)
         if form.is_valid():
-            form.save()
+            university = form.save()
+
+            messages.success(
+                request,
+                f"Вуз «{university.name}» добавлен.",
+            )
+
             return redirect("exchange:university_list")
     else:
         form = UniversityForm()
@@ -49,7 +64,13 @@ def university_edit(request, pk):
     if request.method == "POST":
         form = UniversityForm(request.POST, instance=university)
         if form.is_valid():
-            form.save()
+            university = form.save()
+
+            messages.success(
+                request,
+                f"Изменения вуза «{university.name}» сохранены.",
+            )
+
             return redirect("exchange:university_list")
     else:
         form = UniversityForm(instance=university)
@@ -65,6 +86,12 @@ def university_archive(request, pk):
     university = get_object_or_404(University, pk=pk)
     university.is_archived = True
     university.save(update_fields=["is_archived"])
+
+    messages.success(
+        request,
+        f"Вуз «{university.name}» архивирован.",
+    )
+
     return redirect("exchange:university_list")
 
 
@@ -72,11 +99,18 @@ def university_archive(request, pk):
 
 @curator_required
 def route_list(request):
-    return render(request, "exchange/list.html", {
-        "heading": "Маршруты обмена",
-        "objects": ExchangeRoute.objects.filter(is_archived=False),
-        "create_url": "exchange:route_create",
-    })
+    routes = (
+        ExchangeRoute.objects
+        .filter(is_archived=False)
+        .select_related("from_university", "to_university")
+        .order_by("name", "pk")
+    )
+
+    return render(
+        request,
+        "exchange/routes.html",
+        {"objects": routes},
+    )
 
 
 @curator_required
@@ -84,7 +118,11 @@ def route_create(request):
     if request.method == "POST":
         form = RouteForm(request.POST)
         if form.is_valid():
-            form.save()
+            route = form.save()
+            messages.success(
+                request,
+                f"Маршрут «{route.name}» добавлен.",
+            )
             return redirect("exchange:route_list")
     else:
         form = RouteForm()
@@ -99,7 +137,11 @@ def route_edit(request, pk):
     if request.method == "POST":
         form = RouteForm(request.POST, instance=route)
         if form.is_valid():
-            form.save()
+            route = form.save()
+            messages.success(
+                request,
+                f"Изменения маршрута «{route.name}» сохранены.",
+            )
             return redirect("exchange:route_list")
     else:
         form = RouteForm(instance=route)
@@ -111,9 +153,30 @@ def route_edit(request, pk):
 @require_POST
 @curator_required
 def route_archive(request, pk):
-    route = get_object_or_404(ExchangeRoute, pk=pk)
+    route = get_object_or_404(
+        ExchangeRoute,
+        pk=pk,
+        is_archived=False,
+    )
+
+    if route.participations.filter(is_completed=False).exists():
+        return render(
+            request,
+            "exchange/route_archive_confirm.html",
+            {
+                "route": route,
+                "has_active_participations": True,
+            },
+            status=409,
+        )
+
     route.is_archived = True
     route.save(update_fields=["is_archived"])
+    messages.success(
+        request,
+        f"Маршрут «{route.name}» архивирован.",
+    )
+
     return redirect("exchange:route_list")
 
 
@@ -121,55 +184,125 @@ def route_archive(request, pk):
 
 @curator_required
 def checklist_item_create(request, route_pk):
-    route = get_object_or_404(ExchangeRoute, pk=route_pk, is_archived=False)
+    route = get_object_or_404(
+        ExchangeRoute,
+        pk=route_pk,
+        is_archived=False,
+    )
+
+    item = ChecklistItem(route=route)
+
     if request.method == "POST":
-        form = ChecklistItemForm(request.POST)
-        if form.is_valid():
-            item = form.save(commit=False)
-            item.route = route  # закрытое поле назначает сервер
-            item.save()
-            return redirect("exchange:route_list")
+        form = ChecklistItemForm(request.POST, instance=item)
+
+        if form.is_valid() and _save_checklist_item(form):
+            messages.success(
+                request,
+                "Пункт чек-листа добавлен.",
+            )
+            return redirect("exchange:route_detail", pk=route.pk)
     else:
-        form = ChecklistItemForm()
-    return render(request, "auth/form.html", {
-        "heading": f"Новый пункт чек-листа — {route.name}",
-        "form": form, "button": "Сохранить",
-    })
+        form = ChecklistItemForm(instance=item)
+
+    return render(
+        request,
+        "auth/form.html",
+        {
+            "heading": f"Новый пункт — {route.name}",
+            "form": form,
+            "button": "Добавить пункт",
+            "checklist_route": route,
+        },
+    )
 
 
 @curator_required
 def checklist_item_edit(request, pk):
-    item = get_object_or_404(ChecklistItem, pk=pk, is_archived=False)
+    item = get_object_or_404(
+        ChecklistItem.objects.select_related("route"),
+        pk=pk,
+        is_archived=False,
+        route__is_archived=False,
+    )
+
     if request.method == "POST":
         form = ChecklistItemForm(request.POST, instance=item)
-        if form.is_valid():
-            form.save()
-            return redirect("exchange:route_list")
+
+        if form.is_valid() and _save_checklist_item(form):
+            messages.success(
+                request,
+                "Изменения пункта чек-листа сохранены.",
+            )
+            return redirect(
+                "exchange:route_detail",
+                pk=item.route_id,
+            )
     else:
         form = ChecklistItemForm(instance=item)
-    return render(request, "auth/form.html", {
-        "heading": "Редактировать пункт", "form": form, "button": "Сохранить",
-    })
+
+    return render(
+        request,
+        "auth/form.html",
+        {
+            "heading": "Редактировать пункт чек-листа",
+            "form": form,
+            "button": "Сохранить",
+            "checklist_route": item.route,
+        },
+    )
 
 
 @require_POST
 @curator_required
 def checklist_item_archive(request, pk):
-    item = get_object_or_404(ChecklistItem, pk=pk)
+    item = get_object_or_404(
+        ChecklistItem,
+        pk=pk,
+        is_archived=False,
+        route__is_archived=False,
+    )
+
     item.is_archived = True
     item.save(update_fields=["is_archived"])
-    return redirect("exchange:route_list")
+    messages.success(
+        request,
+        "Пункт чек-листа архивирован.",
+    )
+
+    return redirect(
+        "exchange:route_detail",
+        pk=item.route_id,
+    )
 
 
 # Студенты куратора и участие 
 
 @curator_required
 def student_list(request):
-    """Мои студенты — те, кто зарегистрировался по моим кодам приглашений."""
-    profiles = request.user.students.select_related("user")
-    return render(request, "exchange/students.html", {
-        "heading": "Мои студенты", "profiles": profiles,
-    })
+    active_participations = (
+        ExchangeParticipation.objects
+        .filter(is_completed=False)
+        .select_related("route")
+    )
+
+    profiles = (
+        request.user.students
+        .select_related("user")
+        .prefetch_related(
+            Prefetch(
+                "user__participations",
+                queryset=active_participations,
+                to_attr="active_participations",
+            )
+        )
+        .order_by("user__email")
+    )
+
+    return render(
+        request,
+        "exchange/students.html",
+        {"profiles": profiles},
+    )
 
 
 @curator_required
@@ -269,3 +402,141 @@ def end_assignment_view(request, pk):
     except services.PermissionDenied_:
         return _forbidden(request)
     return redirect("exchange:student_list")
+
+@curator_required
+def university_archive_confirm(request, pk):
+    university = get_object_or_404(
+        University,
+        pk=pk,
+        is_archived=False,
+    )
+
+    return render(
+        request,
+        "exchange/university_archive_confirm.html",
+        {"university": university},
+    )
+
+@curator_required
+def participation_advance_confirm(request, pk):
+    participation = get_object_or_404(
+        ExchangeParticipation.objects.select_related(
+            "student",
+            "route",
+        ),
+        pk=pk,
+    )
+
+    if not can_edit_participation(request.user, participation):
+        return _forbidden(request)
+
+    if participation.current_stage >= Stage.RETURN:
+        return render(
+            request,
+            "auth/form.html",
+            {
+                "heading": "Последний этап обмена",
+                "message": (
+                    "Студент уже находится на этапе возвращения. "
+                    "Следующего этапа нет."
+                ),
+            },
+        )
+
+    next_stage = Stage(participation.current_stage + 1)
+
+    return render(
+        request,
+        "exchange/participation_advance_confirm.html",
+        {
+            "participation": participation,
+            "next_stage_label": next_stage.label,
+        },
+    )
+
+
+@curator_required
+def route_detail(request, pk):
+    route = get_object_or_404(
+        ExchangeRoute.objects.select_related(
+            "from_university",
+            "to_university",
+        ),
+        pk=pk,
+        is_archived=False,
+    )
+
+    items = route.checklist_items.filter(
+        is_archived=False,
+    ).order_by("stage", "display_order", "pk")
+
+    return render(
+        request,
+        "exchange/route_detail.html",
+        {
+            "route": route,
+            "items": items,
+        },
+    )
+
+
+def _save_checklist_item(form):
+    try:
+        with transaction.atomic():
+            form.save()
+    except IntegrityError as exc:
+        constraint_name = getattr(
+            getattr(exc.__cause__, "diag", None),
+            "constraint_name",
+            None,
+        )
+
+        if constraint_name != "unique_item_order_per_stage":
+            raise
+
+        form.add_error(
+            "display_order",
+            "Этот номер уже занят на выбранном этапе. "
+            "Укажите другой.",
+        )
+        return False
+
+    return True
+
+
+@curator_required
+def checklist_item_archive_confirm(request, pk):
+    item = get_object_or_404(
+        ChecklistItem.objects.select_related("route"),
+        pk=pk,
+        is_archived=False,
+        route__is_archived=False,
+    )
+
+    return render(
+        request,
+        "exchange/checklist_item_archive_confirm.html",
+        {"item": item},
+    )
+
+
+@curator_required
+def route_archive_confirm(request, pk):
+    route = get_object_or_404(
+        ExchangeRoute,
+        pk=pk,
+        is_archived=False,
+    )
+
+    has_active_participations = route.participations.filter(
+        is_completed=False,
+    ).exists()
+
+    return render(
+        request,
+        "exchange/route_archive_confirm.html",
+        {
+            "route": route,
+            "has_active_participations": has_active_participations,
+        },
+    )

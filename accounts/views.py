@@ -698,3 +698,18 @@ def entry_page(request, mode="welcome"):
 
 def personal_data_consent(request):
     return render(request, "auth/personal_data_consent.html")
+
+
+@curator_required
+def university_archive_confirm(request, pk):
+    university = get_object_or_404(
+        University,
+        pk=pk,
+        is_archived=False,
+    )
+
+    return render(
+        request,
+        "exchange/university_archive_confirm.html",
+        {"university": university},
+    )

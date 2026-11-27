@@ -1,0 +1,79 @@
+{% extends "auth/base.html" %}
+
+{% block title %}Вузы — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card catalog-card" aria-labelledby="catalog-heading">
+  <h1 id="catalog-heading" class="auth-heading">
+    Вузы
+  </h1>
+    {% include "exchange/_messages.html" %}
+  <p class="auth-message">
+    Добавьте отправляющие и принимающие вузы.
+    Затем их можно будет выбрать при создании маршрута обмена.
+  </p>
+
+  <a
+    class="secondary-button"
+    href="{% url 'exchange:university_create' %}"
+  >
+    Добавить вуз
+  </a>
+
+  <ul class="catalog-list">
+    {% for university in objects %}
+      <li class="catalog-item">
+        <h2 class="catalog-name">{{ university.name }}</h2>
+
+        <dl class="catalog-details">
+          <div>
+            <dt>Страна</dt>
+            <dd>{{ university.country|default:"Не указана" }}</dd>
+          </div>
+
+          <div>
+            <dt>Город</dt>
+            <dd>{{ university.city|default:"Не указан" }}</dd>
+          </div>
+
+          <div>
+            <dt>Часовой пояс</dt>
+            <dd>{{ university.timezone }}</dd>
+          </div>
+        </dl>
+
+        <a
+          class="secondary-button"
+          href="{% url 'exchange:university_edit' university.pk %}"
+          aria-label="Редактировать вуз {{ university.name }}"
+        >
+          Редактировать
+        </a>
+                <div class="auth-navigation">
+          <a
+            class="secondary-button"
+            href="{% url 'exchange:university_archive_confirm' university.pk %}"
+            aria-label="Архивировать вуз {{ university.name }}"
+          >
+            Архивировать
+          </a>
+        </div>
+      </li>
+    {% empty %}
+      <li class="catalog-empty">
+        <p class="catalog-name">Вузов пока нет</p>
+        <p>
+          Нажмите «Добавить вуз», чтобы создать первый вуз
+          для маршрута обмена.
+        </p>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a class="secondary-button" href="{% url 'home' %}">
+      В кабинет
+    </a>
+  </nav>
+</section>
+{% endblock %}

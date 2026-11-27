@@ -38,8 +38,44 @@
     {% endif %}
   </p>
 
-  {% if user.role == "curator" %}
-    <nav class="auth-navigation" aria-label="Действия куратора">
+  {% if user.role == "curator" and user.is_approved %}
+    <nav
+      class="auth-navigation"
+      aria-label="{% if ui_language == 'en' %}Curator actions{% else %}Действия куратора{% endif %}"
+    >
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:university_list' %}"
+      >
+        {% if ui_language == "en" %}
+          Universities
+        {% else %}
+          Вузы
+        {% endif %}
+      </a>
+
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:route_list' %}"
+      >
+        {% if ui_language == "en" %}
+          Exchange routes
+        {% else %}
+          Маршруты обмена
+        {% endif %}
+      </a>
+
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:student_list' %}"
+      >
+        {% if ui_language == "en" %}
+          My students
+        {% else %}
+          Мои студенты
+        {% endif %}
+      </a>
+
       <a
         class="secondary-button"
         href="{% url 'auth:invitations' %}"

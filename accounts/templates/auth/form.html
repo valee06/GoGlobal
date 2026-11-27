@@ -11,6 +11,21 @@
     {% translate heading|default:"GoGlobal" %}
   </h1>
 
+  {% if request.resolver_match.namespace == "exchange" %}
+    {% if request.resolver_match.url_name == "participation_create" %}
+      <p class="auth-message">
+        Укажите маршрут и текущий этап обмена студента.
+        Назначение buddy выполняется отдельно.
+      </p>
+
+    {% elif request.resolver_match.url_name == "participation_edit" %}
+      <p class="auth-message">
+        Здесь можно изменить маршрут участия.
+        Для смены этапа используйте кнопку «На следующий этап» в карточке студента.
+      </p>
+    {% endif %}
+  {% endif %}
+
   {% if message %}
     <p class="auth-message">{% translate message %}</p>
   {% endif %}
@@ -237,7 +252,39 @@
   {% endif %}
 
   <nav class="auth-navigation" aria-label="{% translate 'Навигация' %}">
-    {% if request.resolver_match.url_name == "register_staff" or request.resolver_match.url_name == "register_student" %}
+        {% if request.resolver_match.namespace == "exchange" and request.resolver_match.url_name == "university_create" or request.resolver_match.namespace == "exchange" and request.resolver_match.url_name == "university_edit" %}
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:university_list' %}"
+      >
+        К списку вузов
+      </a>
+
+      {% elif request.resolver_match.namespace == "exchange" and request.resolver_match.url_name == "route_create" or request.resolver_match.namespace == "exchange" and request.resolver_match.url_name == "route_edit" %}
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:route_list' %}"
+      >
+        К списку маршрутов
+      </a>
+
+      {% elif request.resolver_match.namespace == "exchange" and request.resolver_match.url_name == "participation_create" or request.resolver_match.namespace == "exchange" and request.resolver_match.url_name == "participation_edit" %}
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:student_list' %}"
+      >
+        К списку студентов
+      </a>
+
+        {% elif checklist_route %}
+      <a
+        class="secondary-button"
+        href="{% url 'exchange:route_detail' checklist_route.pk %}"
+      >
+        К чек-листу маршрута
+      </a>
+
+    {% elif request.resolver_match.url_name == "register_staff" or request.resolver_match.url_name == "register_student" %}
       <a
         class="secondary-button"
         href="{% url 'auth:choose_role' mode='register' %}?lang={{ ui_language|urlencode }}"

@@ -1,0 +1,10 @@
+{% if messages %}
+  {% for notice in messages %}
+    <div
+      class="notice {{ notice.tags }}"
+      role="{% if notice.level >= 40 %}alert{% else %}status{% endif %}"
+    >
+      {{ notice }}
+    </div>
+  {% endfor %}
+{% endif %}

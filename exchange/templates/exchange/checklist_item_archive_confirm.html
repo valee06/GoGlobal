@@ -1,0 +1,52 @@
+{% extends "auth/base.html" %}
+
+{% block title %}Архивирование пункта — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="archive-heading">
+  <h1 id="archive-heading" class="auth-heading">
+    Архивировать пункт?
+  </h1>
+
+  <dl class="catalog-details">
+    <div>
+      <dt>Пункт</dt>
+      <dd>{{ item.title }}</dd>
+    </div>
+
+    <div>
+      <dt>Маршрут</dt>
+      <dd>{{ item.route.name }}</dd>
+    </div>
+
+    <div>
+      <dt>Этап</dt>
+      <dd>{{ item.get_stage_display }}</dd>
+    </div>
+  </dl>
+
+  <p class="auth-message">
+    Пункт будет скрыт из активного чек-листа маршрута.
+    Его запись останется в базе данных.
+  </p>
+
+  <form
+    method="post"
+    action="{% url 'exchange:item_archive' item.pk %}"
+  >
+    {% csrf_token %}
+    <button class="primary-button" type="submit">
+      Подтвердить архивирование
+    </button>
+  </form>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a
+      class="secondary-button"
+      href="{% url 'exchange:route_detail' item.route_id %}"
+    >
+      Отмена
+    </a>
+  </nav>
+</section>
+{% endblock %}

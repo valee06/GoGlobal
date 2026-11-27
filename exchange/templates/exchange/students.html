@@ -1,18 +1,107 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>{{ heading }} — GoGlobal</title></head>
-<body>
-  <h1>{{ heading }}</h1>
-  <ul>
+{% extends "auth/base.html" %}
+
+{% block title %}Мои студенты — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card catalog-card" aria-labelledby="students-heading">
+  <h1 id="students-heading" class="auth-heading">
+    Мои студенты
+  </h1>
+
+  <p class="auth-message">
+    Здесь отображаются студенты, закреплённые за вами.
+    Создайте участие, чтобы выбрать маршрут и этап обмена.
+  </p>
+
+  <ul class="catalog-list">
     {% for profile in profiles %}
-      <li>
-        {{ profile.user.email }}
-        — <a href="{% url 'exchange:participation_create' profile.user.id %}">создать участие</a>
+      <li class="catalog-item">
+        <h2 class="catalog-name">
+          {{ profile.user.full_name|default:profile.user.email }}
+        </h2>
+
+        <dl class="catalog-details">
+          <div>
+            <dt>Почта</dt>
+            <dd>{{ profile.user.email }}</dd>
+          </div>
+
+          <div>
+            <dt>Подтверждение почты</dt>
+            <dd>
+              {% if profile.user.email_verified %}
+                Подтверждена
+              {% else %}
+                Пока не подтверждена
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+
+        {% for participation in profile.user.active_participations %}
+          <dl class="catalog-details">
+            <div>
+              <dt>Маршрут</dt>
+              <dd>{{ participation.route.name }}</dd>
+            </div>
+
+            <div>
+              <dt>Этап</dt>
+              <dd>{{ participation.get_current_stage_display }}</dd>
+            </div>
+          </dl>
+
+          <a
+            class="secondary-button"
+            href="{% url 'exchange:participation_edit' participation.pk %}"
+          >
+            Редактировать участие
+          </a>
+          {% if participation.current_stage < 3 %}
+            <div class="auth-navigation">
+              <a
+                class="secondary-button"
+                href="{% url 'exchange:participation_advance_confirm' participation.pk %}"
+              >
+                На следующий этап
+              </a>
+            </div>
+          {% endif %}
+        {% empty %}
+          <p class="auth-message">
+            Активное участие в обмене ещё не создано.
+          </p>
+
+          <a
+            class="secondary-button"
+            href="{% url 'exchange:participation_create' profile.user.pk %}"
+          >
+            Создать участие
+          </a>
+        {% endfor %}
       </li>
     {% empty %}
-      <li>Пока нет студентов. Разошлите коды приглашений.</li>
+      <li class="catalog-empty">
+        <p class="catalog-name">Студентов пока нет</p>
+        <p>
+          Создайте код приглашения и передайте его студенту
+          для регистрации.
+        </p>
+      </li>
     {% endfor %}
   </ul>
-  <p><a href="{% url 'home' %}">На главную</a></p>
-</body>
-</html>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a
+      class="secondary-button"
+      href="{% url 'auth:invitations' %}"
+    >
+      Приглашения студентов
+    </a>
+
+    <a class="secondary-button" href="{% url 'home' %}">
+      В кабинет
+    </a>
+  </nav>
+</section>
+{% endblock %}

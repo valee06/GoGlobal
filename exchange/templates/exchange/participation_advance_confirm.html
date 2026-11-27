@@ -1,0 +1,61 @@
+{% extends "auth/base.html" %}
+
+{% block title %}Смена этапа обмена — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="stage-heading">
+  <h1 id="stage-heading" class="auth-heading">
+    Перевести на следующий этап?
+  </h1>
+
+  <dl class="catalog-details">
+    <div>
+      <dt>Студент</dt>
+      <dd>
+        {{ participation.student.full_name|default:participation.student.email }}
+      </dd>
+    </div>
+
+    <div>
+      <dt>Маршрут</dt>
+      <dd>{{ participation.route.name }}</dd>
+    </div>
+
+    <div>
+      <dt>Текущий этап</dt>
+      <dd>{{ participation.get_current_stage_display }}</dd>
+    </div>
+
+    <div>
+      <dt>Следующий этап</dt>
+      <dd><strong>{{ next_stage_label }}</strong></dd>
+    </div>
+  </dl>
+
+  <p class="auth-message">
+    После перехода изменятся действия, доступные участникам
+    на текущем этапе обмена.
+    Подтвердите, что студент готов к переходу.
+  </p>
+
+  <form
+    method="post"
+    action="{% url 'exchange:participation_advance' participation.pk %}"
+  >
+    {% csrf_token %}
+
+    <button class="primary-button" type="submit">
+      Перевести на этап «{{ next_stage_label }}»
+    </button>
+  </form>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a
+      class="secondary-button"
+      href="{% url 'exchange:student_list' %}"
+    >
+      Отмена
+    </a>
+  </nav>
+</section>
+{% endblock %}

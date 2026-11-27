@@ -1,0 +1,51 @@
+{% extends "auth/base.html" %}
+
+{% block title %}Архивирование маршрута — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card" aria-labelledby="archive-heading">
+  <h1 id="archive-heading" class="auth-heading">
+    {% if has_active_participations %}
+      Архивирование недоступно
+    {% else %}
+      Архивировать маршрут?
+    {% endif %}
+  </h1>
+
+  <p class="auth-message">
+    <strong>{{ route.name }}</strong>
+  </p>
+
+  {% if has_active_participations %}
+    <div class="form-alert" role="alert">
+      На этом маршруте есть активные участия студентов.
+      Маршрут нельзя архивировать, пока они остаются активными.
+    </div>
+  {% else %}
+    <p class="auth-message">
+      Маршрут будет скрыт из активного списка
+      и станет недоступен для выбора при создании участия.
+      Запись маршрута и его пункты останутся в базе данных.
+    </p>
+
+    <form
+      method="post"
+      action="{% url 'exchange:route_archive' route.pk %}"
+    >
+      {% csrf_token %}
+      <button class="primary-button" type="submit">
+        Подтвердить архивирование
+      </button>
+    </form>
+  {% endif %}
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a
+      class="secondary-button"
+      href="{% url 'exchange:route_list' %}"
+    >
+      К списку маршрутов
+    </a>
+  </nav>
+</section>
+{% endblock %}

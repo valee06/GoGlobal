@@ -1,0 +1,91 @@
+{% extends "auth/base.html" %}
+
+{% block title %}{{ route.name }} — GoGlobal{% endblock %}
+
+{% block content %}
+<section class="auth-card catalog-card" aria-labelledby="route-heading">
+  <h1 id="route-heading" class="auth-heading">
+    {{ route.name }}
+</h1>
+      {% include "exchange/_messages.html" %}
+  <dl class="catalog-details">
+    <div>
+      <dt>Откуда</dt>
+      <dd>{{ route.from_university.name }}</dd>
+    </div>
+
+    <div>
+      <dt>Куда</dt>
+      <dd>{{ route.to_university.name }}</dd>
+    </div>
+  </dl>
+
+  <h2 class="catalog-name">Чек-лист маршрута</h2>
+
+  <p class="auth-message">
+    Общие пункты сгруппированы по этапам обмена.
+    На их основе формируются персональные задачи студентов.
+  </p>
+
+  <a
+    class="secondary-button"
+    href="{% url 'exchange:item_create' route.pk %}"
+  >
+    Добавить пункт
+  </a>
+
+  <ul class="catalog-list">
+    {% for item in items %}
+      <li class="catalog-item">
+        <p class="field-help">
+          {{ item.get_stage_display }}
+        </p>
+
+        <h3 class="catalog-name">{{ item.title }}</h3>
+
+        <p class="field-help">
+          Порядок внутри этапа: {{ item.display_order }}
+        </p>
+
+        <a
+          class="secondary-button"
+          href="{% url 'exchange:item_edit' item.pk %}"
+          aria-label="Редактировать пункт {{ item.title }}"
+        >
+          Редактировать
+        </a>
+                <div class="auth-navigation">
+          <a
+            class="secondary-button"
+            href="{% url 'exchange:item_archive_confirm' item.pk %}"
+            aria-label="Архивировать пункт {{ item.title }}"
+          >
+            Архивировать
+          </a>
+        </div>
+      </li>
+    {% empty %}
+      <li class="catalog-empty">
+        <p class="catalog-name">Пунктов пока нет</p>
+        <p>
+          Добавьте первый пункт для подготовки,
+          пребывания или возвращения.
+        </p>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <nav class="auth-navigation" aria-label="Навигация">
+    <a
+      class="secondary-button"
+      href="{% url 'exchange:route_list' %}"
+    >
+      К списку маршрутов
+    </a>
+
+    <a class="secondary-button" href="{% url 'home' %}">
+      В кабинет
+    </a>
+  </nav>
+</section>
+{% endblock %}

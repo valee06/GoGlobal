@@ -578,3 +578,71 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--focus); }
 .consent-inline-link:hover {
   color: var(--focus);
 }
+
+.catalog-card {
+  max-width: 760px;
+}
+
+.catalog-list {
+  display: grid;
+  gap: 20px;
+  padding: 0;
+  margin: 28px 0 0;
+  list-style: none;
+}
+
+.catalog-item,
+.catalog-empty {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #ded9ef;
+  border-radius: 16px;
+}
+
+.catalog-name {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.catalog-details {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 22px;
+}
+
+.catalog-details > div {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.catalog-details dt {
+  color: var(--muted);
+}
+
+.catalog-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-empty {
+  border-style: dashed;
+}
+
+.catalog-empty p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 480px) {
+  .catalog-item,
+  .catalog-empty {
+    padding: 16px;
+  }
+
+  .catalog-details > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
